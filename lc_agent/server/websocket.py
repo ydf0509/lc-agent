@@ -45,18 +45,23 @@ class ChatWebSocketHandler:
             await websocket.send_json({"type": "ack", "message": "interrupt handled"})
 
     async def _send_event(self, websocket: WebSocket, event: dict):
-        """Convert LangGraph stream event to client-friendly format."""
+        """Convert LangGraph astream_events v2 to client-friendly format."""
         kind = event.get("event", "")
+
         if kind == "on_chat_model_stream":
             chunk = event.get("data", {}).get("chunk")
             if chunk and hasattr(chunk, "content") and chunk.content:
                 await websocket.send_json({"type": "token", "content": chunk.content})
+
         elif kind == "on_tool_start":
+            tool_input = event.get("data", {}).get("input", {})
             await websocket.send_json({
                 "type": "tool_call",
                 "name": event.get("name", ""),
                 "run_id": event.get("run_id", ""),
+                "args": tool_input,
             })
+
         elif kind == "on_tool_end":
             output = event.get("data", {}).get("output", "")
             await websocket.send_json({
