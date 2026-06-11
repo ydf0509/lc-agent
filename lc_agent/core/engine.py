@@ -49,11 +49,7 @@ class AgentEngine:
         )
 
     def build_agent(self, preset: AgentPreset | None = None):
-        """Build a LangGraph agent from preset.
-
-        Uses langchain.agents.create_agent if available (v1+),
-        falls back to langgraph.prebuilt.create_react_agent.
-        """
+        """Build a LangGraph ReAct agent from preset."""
         if preset is None:
             preset = self.get_default_preset()
         self._current_preset = preset
@@ -68,44 +64,37 @@ class AgentEngine:
                 system_prompt = f"{system_prompt}\n\n# Available Skills\n\n{skills_text}"
 
         tools = self.tool_registry.get_filtered_tools(preset.allowed_tool_groups)
-
         model_info = self._find_model(preset.default_model)
+        llm = self._create_llm(model_info, preset.default_model)
 
-        kwargs = {}
+        from langgraph.prebuilt import create_react_agent
+
+        kwargs: dict[str, Any] = {}
         if self._checkpointer:
             kwargs["checkpointer"] = self._checkpointer
 
-        try:
-            from langchain.agents import create_agent
-            agent = create_agent(
-                model=f"openai:{preset.default_model}",
-                tools=tools,
-                system_prompt=system_prompt,
-                interrupt_on=preset.dangerous_tools or None,
-                **kwargs,
-            )
-        except (ImportError, AttributeError):
-            from langgraph.prebuilt import create_react_agent
-            from langchain_openai import ChatOpenAI
-
-            if model_info:
-                llm = ChatOpenAI(
-                    model=preset.default_model,
-                    base_url=model_info.base_url,
-                    api_key=model_info.api_key,
-                )
-            else:
-                llm = ChatOpenAI(model=preset.default_model)
-
-            agent = create_react_agent(
-                model=llm,
-                tools=tools,
-                prompt=system_prompt,
-                **kwargs,
-            )
+        agent = create_react_agent(
+            model=llm,
+            tools=tools,
+            prompt=system_prompt,
+            **kwargs,
+        )
 
         self._agents[preset.id] = agent
         return agent
+
+    def _create_llm(self, model_info: ModelInfo | None, model_id: str):
+        """Create a ChatOpenAI instance from model info."""
+        from langchain_openai import ChatOpenAI
+
+        if model_info:
+            return ChatOpenAI(
+                model=model_info.id,
+                base_url=model_info.base_url or None,
+                api_key=model_info.api_key or "not-set",
+                temperature=0.7,
+            )
+        return ChatOpenAI(model=model_id, api_key="not-set")
 
     def _find_model(self, model_id: str) -> ModelInfo | None:
         """Find model info by ID."""
