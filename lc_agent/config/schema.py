@@ -12,6 +12,11 @@ class ProviderConfig(BaseModel):
     models: list[ModelConfig] = Field(default_factory=list)
 
 
+class DatabaseConfig(BaseModel):
+    url: str = "sqlite+aiosqlite:///./lc_agent_data.db"
+    checkpoint_path: str = "./lc_agent_checkpoints.db"
+
+
 class AppConfig(BaseModel):
     """Application configuration schema."""
 
@@ -22,5 +27,6 @@ class AppConfig(BaseModel):
         "streaming": True,
     })
     mcp: dict = Field(default_factory=dict)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     session: dict = Field(default_factory=lambda: {"db_path": ""})
     ui: dict = Field(default_factory=dict)
