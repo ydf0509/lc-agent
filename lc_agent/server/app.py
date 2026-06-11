@@ -46,8 +46,11 @@ def create_app(config: dict) -> FastAPI:
     app.include_router(skills_router, prefix="/api")
     app.include_router(mcp_router, prefix="/api")
 
+    return app
+
+
+def mount_static_files(app: FastAPI):
+    """Mount static files AFTER WebSocket routes are registered."""
     web_dist = Path(__file__).parent.parent / "web" / "dist"
     if web_dist.exists():
         app.mount("/", StaticFiles(directory=str(web_dist), html=True), name="frontend")
-
-    return app

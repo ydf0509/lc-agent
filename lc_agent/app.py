@@ -6,7 +6,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from lc_agent.core.engine import AgentEngine
 from lc_agent.db.engine import init_db
-from lc_agent.server.app import create_app
+from lc_agent.server.app import create_app, mount_static_files
 from lc_agent.server.websocket import ChatWebSocketHandler
 
 
@@ -34,6 +34,7 @@ class LcAgentApp:
         self.fastapi_app.state.engine = self.engine
         self._ws_handler = ChatWebSocketHandler(self.engine)
         self._setup_websocket_route()
+        mount_static_files(self.fastapi_app)
 
         @self.fastapi_app.on_event("startup")
         async def startup():
