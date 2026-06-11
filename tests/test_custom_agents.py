@@ -1,4 +1,6 @@
 import pytest
+import httpx
+from httpx import ASGITransport
 from unittest.mock import MagicMock
 from lc_agent.app import LcAgentApp
 
@@ -43,3 +45,35 @@ def test_add_agent_duplicate_raises(app_instance):
 
     with pytest.raises(ValueError, match="already registered"):
         app_instance.add_agent("dup", mock_graph)
+
+
+@pytest.mark.asyncio
+async def test_api_agents_includes_custom(app_instance):
+    """GET /api/agents should include custom agents with source flag."""
+    mock_graph = MagicMock()
+    app_instance.add_agent("api_agent", mock_graph, description="API test")
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app_instance.fastapi_app),
+        base_url="http://test"
+    ) as client:
+        resp = await client.get("/api/agents")
+        assert resp.status_code == 200
+        agents = resp.json()
+        custom = [a for a in agents if a["id"] == "api_agent"]
+        assert len(custom) == 1
+        assert custom[0].get("source") == "code"
+
+
+@pytest.mark.asyncio
+async def test_api_custom_agent_not_deletable(app_instance):
+    """DELETE on custom agent should return 403."""
+    mock_graph = MagicMock()
+    app_instance.add_agent("protected", mock_graph)
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app_instance.fastapi_app),
+        base_url="http://test"
+    ) as client:
+        resp = await client.delete("/api/agents/protected")
+        assert resp.status_code == 403
