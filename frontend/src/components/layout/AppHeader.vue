@@ -4,10 +4,28 @@
       <span class="logo">⚡ lc_agent</span>
     </div>
     <div class="header-center">
-      <span class="current-agent">{{ agentName }}</span>
-      <el-tag size="small" type="info">{{ modelName }}</el-tag>
+      <el-select
+        :model-value="agentsStore.currentAgentId"
+        size="small"
+        style="width: 200px"
+        @change="agentsStore.selectAgent"
+      >
+        <el-option
+          v-for="agent in agentsStore.agents"
+          :key="agent.id"
+          :label="agent.name"
+          :value="agent.id"
+        />
+      </el-select>
+      <el-button size="small" @click="$emit('editAgent')">
+        编辑
+      </el-button>
+      <el-button size="small" type="primary" @click="$emit('newAgent')">
+        + 新Agent
+      </el-button>
     </div>
     <div class="header-right">
+      <el-tag size="small" type="info">{{ modelName }}</el-tag>
       <el-tag size="small" :type="connected ? 'success' : 'danger'" effect="dark">
         {{ connected ? '已连接' : '未连接' }}
       </el-tag>
@@ -16,10 +34,18 @@
 </template>
 
 <script setup lang="ts">
+import { useAgentsStore } from '@/stores/agents'
+
+const agentsStore = useAgentsStore()
+
 defineProps<{
-  agentName: string
   modelName: string
   connected: boolean
+}>()
+
+defineEmits<{
+  editAgent: []
+  newAgent: []
 }>()
 </script>
 
@@ -46,7 +72,9 @@ defineProps<{
   gap: 8px;
 }
 
-.current-agent {
-  font-weight: 500;
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

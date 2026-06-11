@@ -18,6 +18,7 @@ class LcAgentApp:
         self.port = port
         self.engine = AgentEngine(config)
         self.fastapi_app = create_app(config)
+        self.fastapi_app.state.engine = self.engine
         self._ws_handler = ChatWebSocketHandler(self.engine)
         self._setup_websocket_route()
 

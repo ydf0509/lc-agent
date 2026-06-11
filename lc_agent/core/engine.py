@@ -131,3 +131,36 @@ class AgentEngine:
             version="v2",
         ):
             yield event
+
+    def get_presets(self) -> list[AgentPreset]:
+        """Return all agent presets (including default)."""
+        if not hasattr(self, '_presets'):
+            self._presets: dict[str, AgentPreset] = {}
+        default = self.get_default_preset()
+        return [default] + list(self._presets.values())
+
+    def add_preset(self, preset: AgentPreset) -> AgentPreset:
+        """Add a new agent preset."""
+        if not hasattr(self, '_presets'):
+            self._presets = {}
+        self._presets[preset.id] = preset
+        return preset
+
+    def update_preset(self, preset_id: str, data: dict) -> AgentPreset | None:
+        """Update an existing preset."""
+        if not hasattr(self, '_presets'):
+            self._presets = {}
+        if preset_id not in self._presets:
+            return None
+        existing = self._presets[preset_id]
+        updated = existing.model_copy(update=data)
+        self._presets[preset_id] = updated
+        return updated
+
+    def delete_preset(self, preset_id: str) -> bool:
+        """Delete a preset. Cannot delete default."""
+        if not hasattr(self, '_presets'):
+            self._presets = {}
+        if preset_id == "__default__":
+            return False
+        return self._presets.pop(preset_id, None) is not None
