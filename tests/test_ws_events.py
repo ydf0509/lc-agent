@@ -89,3 +89,23 @@ async def test_handle_message_passes_preset_id(handler):
     types = [c[0][0]["type"] for c in calls]
     assert "token" in types
     assert "done" in types
+
+
+@pytest.mark.asyncio
+async def test_handle_message_llm_error(handler):
+    """LLM errors should send error event, not crash."""
+    ws = AsyncMock()
+
+    async def failing_stream(msg, tid, pid):
+        raise RuntimeError("API key invalid")
+        yield  # noqa: unreachable - makes it a generator
+
+    handler.engine.chat_stream = failing_stream
+
+    data = {"type": "message", "content": "hi"}
+    await handler.handle_message(ws, "thread-1", data)
+
+    calls = ws.send_json.call_args_list
+    error_calls = [c for c in calls if c[0][0].get("type") == "error"]
+    assert len(error_calls) == 1
+    assert "API key invalid" in error_calls[0][0][0]["message"]
