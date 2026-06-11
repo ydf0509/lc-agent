@@ -8,7 +8,7 @@
     />
 
     <div class="app-body">
-      <LeftSidebar @new-chat="handleNewChat" />
+      <LeftSidebar @new-chat="handleNewChat" @switch-session="handleSwitchSession" />
 
       <main class="chat-main">
         <ChatView />
@@ -26,6 +26,7 @@ import { ref, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useToolsStore } from '@/stores/tools'
 import { useAgentsStore } from '@/stores/agents'
+import { useSessionsStore } from '@/stores/sessions'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LeftSidebar from '@/components/layout/LeftSidebar.vue'
 import RightPanel from '@/components/layout/RightPanel.vue'
@@ -35,19 +36,29 @@ import AgentEditorDialog from '@/components/dialogs/AgentEditorDialog.vue'
 const chatStore = useChatStore()
 const toolsStore = useToolsStore()
 const agentsStore = useAgentsStore()
+const sessionsStore = useSessionsStore()
 const agentEditorRef = ref<InstanceType<typeof AgentEditorDialog>>()
 
 onMounted(async () => {
   await Promise.all([
     toolsStore.init(),
     agentsStore.init(),
+    sessionsStore.init(),
   ])
 })
 
-function handleNewChat() {
+async function handleNewChat() {
+  const session = await sessionsStore.createSession()
   chatStore.clearMessages()
   chatStore.disconnect()
-  chatStore.connect()
+  chatStore.connect(session.id)
+}
+
+function handleSwitchSession(sessionId: string) {
+  sessionsStore.selectSession(sessionId)
+  chatStore.clearMessages()
+  chatStore.disconnect()
+  chatStore.connect(sessionId)
 }
 
 function editCurrentAgent() {

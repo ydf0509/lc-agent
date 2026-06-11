@@ -24,4 +24,12 @@ export const api = {
   createAgent: (data: object) => fetchApi<any>('/agents', { method: 'POST', body: JSON.stringify(data) }),
   updateAgent: (id: string, data: object) => fetchApi<any>(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAgent: (id: string) => fetchApi<void>(`/agents/${id}`, { method: 'DELETE' }),
+
+  getSessions: () => fetchApi<any[]>('/sessions'),
+  createSession: (data: { title?: string; agent_id?: string; model?: string }) =>
+    fetchApi<{ id: string; title: string }>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
+  updateSession: (id: string, data: { title?: string }) =>
+    fetchApi<any>(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSession: (id: string) =>
+    fetchApi<void>(`/sessions/${id}`, { method: 'DELETE' }),
 }

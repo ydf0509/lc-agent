@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
-from langgraph.checkpoint.memory import InMemorySaver
-
 from lc_agent.core.models import AgentPreset, ModelInfo
 from lc_agent.tools.registry import ToolRegistry
 
@@ -12,13 +10,14 @@ from lc_agent.tools.registry import ToolRegistry
 class AgentEngine:
     """Core agent engine wrapping LangChain create_agent with middleware support."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, checkpointer=None):
         self.config = config
         self.tool_registry = ToolRegistry()
-        self._checkpointer = InMemorySaver()
+        self._checkpointer = checkpointer
         self._agents: dict[str, Any] = {}
         self._current_preset: AgentPreset | None = None
         self._models: list[ModelInfo] = self._parse_models(config)
+        self._presets: dict[str, AgentPreset] = {}
 
     def _parse_models(self, config: dict) -> list[ModelInfo]:
         """Extract ModelInfo list from config."""
@@ -63,6 +62,10 @@ class AgentEngine:
 
         model_info = self._find_model(preset.default_model)
 
+        kwargs = {}
+        if self._checkpointer:
+            kwargs["checkpointer"] = self._checkpointer
+
         try:
             from langchain.agents import create_agent
             agent = create_agent(
@@ -70,7 +73,7 @@ class AgentEngine:
                 tools=tools,
                 system_prompt=preset.system_prompt,
                 interrupt_on=preset.dangerous_tools or None,
-                checkpointer=self._checkpointer,
+                **kwargs,
             )
         except (ImportError, AttributeError):
             from langgraph.prebuilt import create_react_agent
@@ -89,7 +92,7 @@ class AgentEngine:
                 model=llm,
                 tools=tools,
                 prompt=preset.system_prompt,
-                checkpointer=self._checkpointer,
+                **kwargs,
             )
 
         self._agents[preset.id] = agent
@@ -134,22 +137,16 @@ class AgentEngine:
 
     def get_presets(self) -> list[AgentPreset]:
         """Return all agent presets (including default)."""
-        if not hasattr(self, '_presets'):
-            self._presets: dict[str, AgentPreset] = {}
         default = self.get_default_preset()
         return [default] + list(self._presets.values())
 
     def add_preset(self, preset: AgentPreset) -> AgentPreset:
         """Add a new agent preset."""
-        if not hasattr(self, '_presets'):
-            self._presets = {}
         self._presets[preset.id] = preset
         return preset
 
     def update_preset(self, preset_id: str, data: dict) -> AgentPreset | None:
         """Update an existing preset."""
-        if not hasattr(self, '_presets'):
-            self._presets = {}
         if preset_id not in self._presets:
             return None
         existing = self._presets[preset_id]
@@ -159,8 +156,6 @@ class AgentEngine:
 
     def delete_preset(self, preset_id: str) -> bool:
         """Delete a preset. Cannot delete default."""
-        if not hasattr(self, '_presets'):
-            self._presets = {}
         if preset_id == "__default__":
             return False
         return self._presets.pop(preset_id, None) is not None

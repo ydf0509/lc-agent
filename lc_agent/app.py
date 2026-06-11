@@ -5,6 +5,7 @@ import uvicorn
 from fastapi import WebSocket, WebSocketDisconnect
 
 from lc_agent.core.engine import AgentEngine
+from lc_agent.db.engine import init_db
 from lc_agent.server.app import create_app
 from lc_agent.server.websocket import ChatWebSocketHandler
 
@@ -16,11 +17,26 @@ class LcAgentApp:
         self.config = config
         self.host = host
         self.port = port
+        self._db_url = config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
+        self._checkpoint_path = config.get("database", {}).get("checkpoint_path", "./lc_agent_checkpoints.db")
         self.engine = AgentEngine(config)
         self.fastapi_app = create_app(config)
         self.fastapi_app.state.engine = self.engine
         self._ws_handler = ChatWebSocketHandler(self.engine)
         self._setup_websocket_route()
+
+        @self.fastapi_app.on_event("startup")
+        async def startup():
+            await init_db(self._db_url)
+            try:
+                from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+                import aiosqlite
+                conn = await aiosqlite.connect(self._checkpoint_path)
+                saver = AsyncSqliteSaver(conn)
+                await saver.setup()
+                self.engine._checkpointer = saver
+            except Exception as e:
+                print(f"[Warning] Checkpoint saver setup failed, using None: {e}")
 
     def _setup_websocket_route(self):
         @self.fastapi_app.websocket("/ws/chat/{thread_id}")

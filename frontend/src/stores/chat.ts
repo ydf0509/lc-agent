@@ -33,7 +33,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const lastMessage = computed(() => messages.value[messages.value.length - 1])
 
-  async function connect() {
+  async function connect(existingThreadId?: string) {
     ws.value = new ChatWebSocket()
 
     ws.value.on('token', (msg: WsMessage) => {
@@ -93,8 +93,18 @@ export const useChatStore = defineStore('chat', () => {
       console.error('[Chat] Error:', msg.message)
     })
 
+    ws.value.on('history', (msg: WsMessage) => {
+      const historyMessages = (msg as any).messages || []
+      messages.value = historyMessages.map((m: any, idx: number) => ({
+        id: crypto.randomUUID(),
+        role: m.role === 'human' ? 'user' : m.role === 'ai' ? 'assistant' : m.role,
+        content: m.content || '',
+        timestamp: Date.now() - (historyMessages.length - idx) * 1000,
+      }))
+    })
+
     try {
-      const tid = await ws.value.connect()
+      const tid = await ws.value.connect(existingThreadId)
       threadId.value = tid
       isConnected.value = true
     } catch (e) {
