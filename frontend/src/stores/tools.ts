@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { api } from '@/api/http'
 
 export interface ToolGroup {
   name: string
@@ -7,10 +8,33 @@ export interface ToolGroup {
   enabled: boolean
 }
 
+export interface ModelInfo {
+  id: string
+  provider: string
+  base_url: string
+  context_limit: number
+}
+
 export const useToolsStore = defineStore('tools', () => {
   const groups = ref<ToolGroup[]>([])
-  const models = ref<{ id: string; provider: string; context_limit: number }[]>([])
+  const models = ref<ModelInfo[]>([])
   const currentModel = ref('')
+
+  async function init() {
+    try {
+      const [groupsData, modelsData] = await Promise.all([
+        api.getToolGroups(),
+        api.getModels(),
+      ])
+      groups.value = groupsData.map(g => ({ ...g, enabled: true }))
+      models.value = modelsData
+      if (modelsData.length > 0 && !currentModel.value) {
+        currentModel.value = modelsData[0].id
+      }
+    } catch (e) {
+      console.error('[ToolsStore] Failed to fetch:', e)
+    }
+  }
 
   function toggleGroup(groupName: string) {
     const group = groups.value.find(g => g.name === groupName)
@@ -21,5 +45,5 @@ export const useToolsStore = defineStore('tools', () => {
     currentModel.value = modelId
   }
 
-  return { groups, models, currentModel, toggleGroup, setModel }
+  return { groups, models, currentModel, init, toggleGroup, setModel }
 })

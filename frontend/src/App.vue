@@ -1,8 +1,7 @@
 <template>
   <div class="app-container">
     <AppHeader
-      :agent-name="'Default Agent'"
-      :model-name="toolsStore.currentModel || 'deepseek-chat'"
+      :model-name="toolsStore.currentModel || agentsStore.currentAgent?.default_model || 'N/A'"
       :connected="chatStore.isConnected"
     />
 
@@ -19,8 +18,10 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useToolsStore } from '@/stores/tools'
+import { useAgentsStore } from '@/stores/agents'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import LeftSidebar from '@/components/layout/LeftSidebar.vue'
 import RightPanel from '@/components/layout/RightPanel.vue'
@@ -28,6 +29,14 @@ import ChatView from '@/views/ChatView.vue'
 
 const chatStore = useChatStore()
 const toolsStore = useToolsStore()
+const agentsStore = useAgentsStore()
+
+onMounted(async () => {
+  await Promise.all([
+    toolsStore.init(),
+    agentsStore.init(),
+  ])
+})
 
 function handleNewChat() {
   chatStore.clearMessages()
