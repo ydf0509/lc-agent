@@ -18,6 +18,7 @@ class AgentEngine:
         self._current_preset: AgentPreset | None = None
         self._models: list[ModelInfo] = self._parse_models(config)
         self._presets: dict[str, AgentPreset] = {}
+        self._custom_presets: dict[str, AgentPreset] = {}
 
     def _parse_models(self, config: dict) -> list[ModelInfo]:
         """Extract ModelInfo list from config."""
@@ -49,11 +50,7 @@ class AgentEngine:
         )
 
     def build_agent(self, preset: AgentPreset | None = None):
-        """Build a LangGraph agent from preset.
-
-        Uses langchain.agents.create_agent if available (v1+),
-        falls back to langgraph.prebuilt.create_react_agent.
-        """
+        """Build a LangGraph ReAct agent from preset."""
         if preset is None:
             preset = self.get_default_preset()
         self._current_preset = preset
@@ -68,44 +65,40 @@ class AgentEngine:
                 system_prompt = f"{system_prompt}\n\n# Available Skills\n\n{skills_text}"
 
         tools = self.tool_registry.get_filtered_tools(preset.allowed_tool_groups)
-
         model_info = self._find_model(preset.default_model)
+        llm = self._create_llm(model_info, preset.default_model)
 
-        kwargs = {}
+        from langgraph.prebuilt import create_react_agent
+
+        kwargs: dict[str, Any] = {}
         if self._checkpointer:
             kwargs["checkpointer"] = self._checkpointer
 
-        try:
-            from langchain.agents import create_agent
-            agent = create_agent(
-                model=f"openai:{preset.default_model}",
-                tools=tools,
-                system_prompt=system_prompt,
-                interrupt_on=preset.dangerous_tools or None,
-                **kwargs,
-            )
-        except (ImportError, AttributeError):
-            from langgraph.prebuilt import create_react_agent
-            from langchain_openai import ChatOpenAI
+        if preset.dangerous_tools:
+            kwargs["interrupt_before"] = ["tools"]
 
-            if model_info:
-                llm = ChatOpenAI(
-                    model=preset.default_model,
-                    base_url=model_info.base_url,
-                    api_key=model_info.api_key,
-                )
-            else:
-                llm = ChatOpenAI(model=preset.default_model)
-
-            agent = create_react_agent(
-                model=llm,
-                tools=tools,
-                prompt=system_prompt,
-                **kwargs,
-            )
+        agent = create_react_agent(
+            model=llm,
+            tools=tools,
+            prompt=system_prompt,
+            **kwargs,
+        )
 
         self._agents[preset.id] = agent
         return agent
+
+    def _create_llm(self, model_info: ModelInfo | None, model_id: str):
+        """Create a ChatOpenAI instance from model info."""
+        from langchain_openai import ChatOpenAI
+
+        if model_info:
+            return ChatOpenAI(
+                model=model_info.id,
+                base_url=model_info.base_url or None,
+                api_key=model_info.api_key or "not-set",
+                temperature=0.7,
+            )
+        return ChatOpenAI(model=model_id, api_key="not-set")
 
     def _find_model(self, model_id: str) -> ModelInfo | None:
         """Find model info by ID."""
@@ -118,7 +111,8 @@ class AgentEngine:
         """Send a message and get a response (non-streaming)."""
         agent = self._agents.get(preset_id)
         if agent is None:
-            agent = self.build_agent(self._current_preset or self.get_default_preset())
+            preset = self._presets.get(preset_id) or self.get_default_preset()
+            agent = self.build_agent(preset)
 
         config = {"configurable": {"thread_id": thread_id}}
         result = await agent.ainvoke(
@@ -130,11 +124,12 @@ class AgentEngine:
             return messages[-1].content
         return ""
 
-    async def chat_stream(self, message: str, thread_id: str) -> AsyncIterator[dict]:
+    async def chat_stream(self, message: str, thread_id: str, preset_id: str = "__default__") -> AsyncIterator[dict]:
         """Stream chat responses as events."""
-        agent = self._agents.get("__default__")
+        agent = self._agents.get(preset_id)
         if agent is None:
-            agent = self.build_agent()
+            preset = self._presets.get(preset_id) or self.get_default_preset()
+            agent = self.build_agent(preset)
 
         config = {"configurable": {"thread_id": thread_id}}
         async for event in agent.astream_events(
@@ -145,9 +140,9 @@ class AgentEngine:
             yield event
 
     def get_presets(self) -> list[AgentPreset]:
-        """Return all agent presets (including default)."""
+        """Return all agent presets (including default and custom)."""
         default = self.get_default_preset()
-        return [default] + list(self._presets.values())
+        return [default] + list(self._presets.values()) + list(self._custom_presets.values())
 
     def add_preset(self, preset: AgentPreset) -> AgentPreset:
         """Add a new agent preset."""

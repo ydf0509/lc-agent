@@ -11,6 +11,7 @@ class McpServerStatus:
     command: str
     status: str = "disconnected"
     tools: list[str] = field(default_factory=list)
+    tool_schemas: list[dict] = field(default_factory=list)
     error: str | None = None
 
 
@@ -40,7 +41,8 @@ class McpManager:
             await self._connect_server(name, conf)
 
     async def _connect_server(self, name: str, conf: dict):
-        """Connect to a single MCP server."""
+        """Connect to a single MCP server and discover tools with schemas."""
+        self._servers[name].status = "connecting"
         try:
             from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
@@ -57,8 +59,17 @@ class McpManager:
                     await session.initialize()
                     tools_result = await session.list_tools()
                     tool_names = [t.name for t in tools_result.tools]
+                    tool_schemas = [
+                        {
+                            "name": t.name,
+                            "description": getattr(t, 'description', '') or '',
+                            "input_schema": getattr(t, 'inputSchema', {}) or {},
+                        }
+                        for t in tools_result.tools
+                    ]
                     self._servers[name].status = "connected"
                     self._servers[name].tools = tool_names
+                    self._servers[name].tool_schemas = tool_schemas
 
         except Exception as e:
             self._servers[name].status = "error"
@@ -68,3 +79,14 @@ class McpManager:
         """Get tool names for a given server."""
         server = self._servers.get(server_name)
         return server.tools if server else []
+
+    def get_langchain_tools(self) -> list:
+        """Get all connected MCP tools as LangChain StructuredTools."""
+        from lc_agent.mcp.tool_adapter import create_langchain_tools_from_schemas
+
+        all_tools = []
+        for server in self._servers.values():
+            if server.status == "connected" and server.tool_schemas:
+                tools = create_langchain_tools_from_schemas(server.name, server.tool_schemas)
+                all_tools.extend(tools)
+        return all_tools

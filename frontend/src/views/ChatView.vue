@@ -36,8 +36,8 @@ function handleSend(content: string) {
   chatStore.sendMessage(content)
 }
 
-function handleInterruptDecide(decision: object) {
-  chatStore.respondToInterrupt(decision)
+function handleInterruptDecide(decision: { type: string }) {
+  chatStore.respondToInterrupt(decision.type === 'approve')
 }
 
 watch(messages, () => {

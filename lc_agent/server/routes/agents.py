@@ -33,7 +33,22 @@ class AgentUpdateRequest(BaseModel):
 @router.get("/agents")
 def list_agents(engine: AgentEngine = Depends(get_engine)):
     """List all agent presets."""
-    return [preset.model_dump() for preset in engine.get_presets()]
+    presets = engine.get_presets()
+    result = []
+    for p in presets:
+        item = {
+            "id": p.id,
+            "name": p.name,
+            "system_prompt": p.system_prompt,
+            "default_model": p.default_model,
+            "allowed_tool_groups": p.allowed_tool_groups,
+            "allowed_mcp_servers": p.allowed_mcp_servers,
+            "allowed_skills": p.allowed_skills,
+            "dangerous_tools": p.dangerous_tools,
+            "source": "code" if p.id in engine._custom_presets else "config",
+        }
+        result.append(item)
+    return result
 
 
 @router.post("/agents", status_code=201)
@@ -68,6 +83,8 @@ def delete_agent(agent_id: str, engine: AgentEngine = Depends(get_engine)):
     """Delete an agent preset."""
     if agent_id == "__default__":
         raise HTTPException(status_code=400, detail="Cannot delete default agent")
+    if agent_id in engine._custom_presets:
+        raise HTTPException(status_code=403, detail="Cannot delete code-registered agent")
     deleted = engine.delete_preset(agent_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Agent not found")

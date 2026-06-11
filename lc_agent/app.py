@@ -48,6 +48,19 @@ class LcAgentApp:
             except Exception as e:
                 print(f"[Warning] Checkpoint saver setup failed, using None: {e}")
 
+            import asyncio
+
+            async def _connect_mcp_background():
+                try:
+                    await self.mcp_manager.connect_all()
+                    connected = [s for s in self.mcp_manager.servers if s.status == "connected"]
+                    if connected:
+                        print(f"[MCP] Connected: {[s.name for s in connected]}")
+                except Exception as e:
+                    print(f"[MCP] Background connection error: {e}")
+
+            asyncio.create_task(_connect_mcp_background())
+
     def _setup_websocket_route(self):
         @self.fastapi_app.websocket("/ws/chat/{thread_id}")
         async def websocket_chat(websocket: WebSocket, thread_id: str):
@@ -68,6 +81,28 @@ class LcAgentApp:
                     await self._ws_handler.handle_message(websocket, tid, data)
             except WebSocketDisconnect:
                 await self._ws_handler.disconnect(tid)
+
+    def add_agent(self, name: str, graph, description: str = ""):
+        """Register a pre-built CompiledStateGraph as a named agent.
+
+        Args:
+            name: Unique agent identifier
+            graph: A compiled LangGraph (must have ainvoke and astream_events)
+            description: Human-readable description
+        """
+        if name in self.engine._agents:
+            raise ValueError(f"Agent '{name}' already registered")
+
+        from lc_agent.core.models import AgentPreset
+
+        self.engine._agents[name] = graph
+        preset = AgentPreset(
+            id=name,
+            name=name,
+            system_prompt=description or f"Custom agent: {name}",
+            default_model="custom",
+        )
+        self.engine._custom_presets[name] = preset
 
     def run(self):
         """Start the server (blocking)."""
