@@ -20,6 +20,9 @@ export const api = {
 
   getModels: () => fetchApi<{ id: string; provider: string; base_url: string; context_limit: number }[]>('/models'),
 
+  getMcpServers: () => fetchApi<any[]>('/mcp'),
+  getSkills: () => fetchApi<any[]>('/skills'),
+
   getAgents: () => fetchApi<any[]>('/agents'),
   createAgent: (data: object) => fetchApi<any>('/agents', { method: 'POST', body: JSON.stringify(data) }),
   updateAgent: (id: string, data: object) => fetchApi<any>(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

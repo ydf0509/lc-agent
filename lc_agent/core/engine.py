@@ -58,6 +58,15 @@ class AgentEngine:
             preset = self.get_default_preset()
         self._current_preset = preset
 
+        system_prompt = preset.system_prompt
+        if hasattr(self, '_skill_scanner') and self._skill_scanner:
+            enabled_skills = self._skill_scanner.get_filtered(preset.allowed_skills)
+            if enabled_skills:
+                skills_text = "\n\n---\n\n".join(
+                    f"## Skill: {s.name}\n\n{s.content}" for s in enabled_skills
+                )
+                system_prompt = f"{system_prompt}\n\n# Available Skills\n\n{skills_text}"
+
         tools = self.tool_registry.get_filtered_tools(preset.allowed_tool_groups)
 
         model_info = self._find_model(preset.default_model)
@@ -71,7 +80,7 @@ class AgentEngine:
             agent = create_agent(
                 model=f"openai:{preset.default_model}",
                 tools=tools,
-                system_prompt=preset.system_prompt,
+                system_prompt=system_prompt,
                 interrupt_on=preset.dangerous_tools or None,
                 **kwargs,
             )
@@ -91,7 +100,7 @@ class AgentEngine:
             agent = create_react_agent(
                 model=llm,
                 tools=tools,
-                prompt=preset.system_prompt,
+                prompt=system_prompt,
                 **kwargs,
             )
 

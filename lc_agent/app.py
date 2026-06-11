@@ -20,7 +20,17 @@ class LcAgentApp:
         self._db_url = config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
         self._checkpoint_path = config.get("database", {}).get("checkpoint_path", "./lc_agent_checkpoints.db")
         self.engine = AgentEngine(config)
+        from lc_agent.skills.scanner import SkillScanner
+        skills_dir = config.get("skills", {}).get("directory", "./skills")
+        self.skill_scanner = SkillScanner(skills_dir)
+        self.skill_scanner.scan()
+        from lc_agent.mcp.manager import McpManager
+        mcp_config = config.get("mcp_servers", {})
+        self.mcp_manager = McpManager(mcp_config)
         self.fastapi_app = create_app(config)
+        self.fastapi_app.state.mcp_manager = self.mcp_manager
+        self.fastapi_app.state.skill_scanner = self.skill_scanner
+        self.engine._skill_scanner = self.skill_scanner
         self.fastapi_app.state.engine = self.engine
         self._ws_handler = ChatWebSocketHandler(self.engine)
         self._setup_websocket_route()

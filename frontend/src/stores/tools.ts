@@ -18,16 +18,22 @@ export interface ModelInfo {
 export const useToolsStore = defineStore('tools', () => {
   const groups = ref<ToolGroup[]>([])
   const models = ref<ModelInfo[]>([])
+  const mcpServers = ref<any[]>([])
+  const skills = ref<any[]>([])
   const currentModel = ref('')
 
   async function init() {
     try {
-      const [groupsData, modelsData] = await Promise.all([
+      const [groupsData, modelsData, mcpData, skillsData] = await Promise.all([
         api.getToolGroups(),
         api.getModels(),
+        api.getMcpServers(),
+        api.getSkills(),
       ])
       groups.value = groupsData.map(g => ({ ...g, enabled: true }))
       models.value = modelsData
+      mcpServers.value = mcpData
+      skills.value = skillsData
       if (modelsData.length > 0 && !currentModel.value) {
         currentModel.value = modelsData[0].id
       }
@@ -45,5 +51,5 @@ export const useToolsStore = defineStore('tools', () => {
     currentModel.value = modelId
   }
 
-  return { groups, models, currentModel, init, toggleGroup, setModel }
+  return { groups, models, mcpServers, skills, currentModel, init, toggleGroup, setModel }
 })
