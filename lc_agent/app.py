@@ -82,6 +82,28 @@ class LcAgentApp:
             except WebSocketDisconnect:
                 await self._ws_handler.disconnect(tid)
 
+    def add_agent(self, name: str, graph, description: str = ""):
+        """Register a pre-built CompiledStateGraph as a named agent.
+
+        Args:
+            name: Unique agent identifier
+            graph: A compiled LangGraph (must have ainvoke and astream_events)
+            description: Human-readable description
+        """
+        if name in self.engine._agents:
+            raise ValueError(f"Agent '{name}' already registered")
+
+        from lc_agent.core.models import AgentPreset
+
+        self.engine._agents[name] = graph
+        preset = AgentPreset(
+            id=name,
+            name=name,
+            system_prompt=description or f"Custom agent: {name}",
+            default_model="custom",
+        )
+        self.engine._custom_presets[name] = preset
+
     def run(self):
         """Start the server (blocking)."""
         from lc_agent import __version__

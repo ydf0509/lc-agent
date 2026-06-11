@@ -18,6 +18,7 @@ class AgentEngine:
         self._current_preset: AgentPreset | None = None
         self._models: list[ModelInfo] = self._parse_models(config)
         self._presets: dict[str, AgentPreset] = {}
+        self._custom_presets: dict[str, AgentPreset] = {}
 
     def _parse_models(self, config: dict) -> list[ModelInfo]:
         """Extract ModelInfo list from config."""
@@ -139,9 +140,9 @@ class AgentEngine:
             yield event
 
     def get_presets(self) -> list[AgentPreset]:
-        """Return all agent presets (including default)."""
+        """Return all agent presets (including default and custom)."""
         default = self.get_default_preset()
-        return [default] + list(self._presets.values())
+        return [default] + list(self._presets.values()) + list(self._custom_presets.values())
 
     def add_preset(self, preset: AgentPreset) -> AgentPreset:
         """Add a new agent preset."""
