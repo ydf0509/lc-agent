@@ -1,7 +1,11 @@
 # lc_agent/server/app.py
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI
+
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
