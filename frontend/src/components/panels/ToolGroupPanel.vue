@@ -4,7 +4,7 @@
       <div class="group-header">
         <span class="group-name">{{ group.name }}</span>
         <el-switch
-          v-model="group.enabled"
+          :model-value="group.enabled"
           size="small"
           @change="$emit('toggle', group.name)"
         />
