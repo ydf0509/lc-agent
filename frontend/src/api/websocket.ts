@@ -67,8 +67,12 @@ export class ChatWebSocket {
     this.send({ type: 'message', content })
   }
 
-  sendInterruptResponse(decision: object) {
-    this.send({ type: 'interrupt_response', decision })
+  sendInterruptResponse(approved: boolean, presetId: string) {
+    this.send({
+      type: 'interrupt_response',
+      approved,
+      preset_id: presetId,
+    })
   }
 
   on(event: string, handler: WsEventHandler) {

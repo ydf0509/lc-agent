@@ -113,7 +113,7 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function sendMessage(content: string) {
+  function sendMessage(content: string, presetId: string = '__default__') {
     if (!ws.value || !content.trim()) return
 
     messages.value.push({
@@ -123,11 +123,15 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: Date.now(),
     })
 
-    ws.value.sendMessage(content.trim())
+    ws.value.send({
+      type: 'message',
+      content: content.trim(),
+      preset_id: presetId,
+    })
   }
 
-  function respondToInterrupt(decision: object) {
-    ws.value?.sendInterruptResponse(decision)
+  function respondToInterrupt(approved: boolean, presetId: string = '__default__') {
+    ws.value?.sendInterruptResponse(approved, presetId)
     interrupt.value = null
   }
 
