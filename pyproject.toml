@@ -1,0 +1,43 @@
+[project]
+name = "lc-agent"
+version = "0.1.0"
+description = "LangChain Agent framework with built-in Web UI"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "langchain>=1.0",
+    "langgraph>=0.4",
+    "langchain-openai",
+    "langchain-deepseek",
+    "fastapi>=0.115",
+    "uvicorn[standard]",
+    "sqlmodel>=0.0.22",
+    "aiosqlite",
+    "python-dotenv",
+    "commentjson",
+    "websockets",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx",
+    "ruff",
+]
+
+[project.scripts]
+lc-agent = "lc_agent.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120

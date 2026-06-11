@@ -1,0 +1,23 @@
+{
+    // lc_agent 配置文件
+    "provider": {
+        "default": {
+            "api_key": "{env:LLM_API_KEY}",
+            "base_url": "https://api.deepseek.com/v1",
+            "models": [
+                {"id": "deepseek-chat", "context_limit": 64000},
+                {"id": "deepseek-reasoner", "context_limit": 64000}
+            ]
+        }
+    },
+    "agent": {
+        "system_prompt": "你是一个智能助手。请用中文回答。",
+        "default_model": "deepseek-chat",
+        "streaming": true
+    },
+    "mcp": {
+    },
+    "session": {
+        "db_path": ""
+    }
+}
