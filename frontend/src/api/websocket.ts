@@ -2,12 +2,19 @@ export interface WsMessage {
   type: string
   content?: string
   thread_id?: string
+  title?: string
   name?: string
   result?: string
   message?: string
   run_id?: string
+  args?: Record<string, any>
   action_requests?: any[]
   review_configs?: any[]
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  cache_read_tokens?: number
+  usage?: any[]
 }
 
 export type WsEventHandler = (msg: WsMessage) => void
@@ -73,6 +80,10 @@ export class ChatWebSocket {
       approved,
       preset_id: presetId,
     })
+  }
+
+  sendCancel() {
+    this.send({ type: 'cancel' })
   }
 
   on(event: string, handler: WsEventHandler) {

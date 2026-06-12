@@ -11,15 +11,23 @@ export interface AgentPreset {
   allowed_mcp_servers: string[] | null
   allowed_skills: string[] | null
   dangerous_tools: string[]
+  source: 'builtin' | 'code' | 'user'
+  default_enabled: boolean
 }
+
+const BUILTIN_IDS = new Set(['__chat__', '__empty__', '__power__'])
 
 export const useAgentsStore = defineStore('agents', () => {
   const agents = ref<AgentPreset[]>([])
-  const currentAgentId = ref('__default__')
+  const currentAgentId = ref('__chat__')
 
   const currentAgent = computed(() =>
     agents.value.find(a => a.id === currentAgentId.value) || agents.value[0]
   )
+
+  const isBuiltin = computed(() => BUILTIN_IDS.has(currentAgentId.value))
+
+  const isChatAgent = computed(() => currentAgentId.value === '__chat__')
 
   async function init() {
     try {
@@ -43,23 +51,37 @@ export const useAgentsStore = defineStore('agents', () => {
   }
 
   async function deleteAgent(id: string) {
+    if (BUILTIN_IDS.has(id)) return
     await api.deleteAgent(id)
     agents.value = agents.value.filter(a => a.id !== id)
-    if (currentAgentId.value === id) currentAgentId.value = '__default__'
+    if (currentAgentId.value === id) currentAgentId.value = '__chat__'
   }
 
   function selectAgent(id: string) {
     currentAgentId.value = id
   }
 
+  function getAgentName(agentId: string): string {
+    const agent = agents.value.find(a => a.id === agentId)
+    return agent?.name || agentId
+  }
+
+  function isAgentBuiltin(id: string): boolean {
+    return BUILTIN_IDS.has(id)
+  }
+
   return {
     agents,
     currentAgentId,
     currentAgent,
+    isBuiltin,
+    isChatAgent,
     init,
     createAgent,
     updateAgent,
     deleteAgent,
     selectAgent,
+    getAgentName,
+    isAgentBuiltin,
   }
 })

@@ -1,12 +1,13 @@
 <template>
   <div class="tool-group-panel">
-    <div v-for="group in groups" :key="group.name" class="group-item">
+    <div v-for="group in groups" :key="group.id" class="group-item" :class="{ 'not-allowed': !(group as any).allowed && (group as any).allowed !== undefined }">
       <div class="group-header">
-        <span class="group-name">{{ group.name }}</span>
+        <span class="group-name">{{ group.description || group.id }}</span>
         <el-switch
           :model-value="group.enabled"
+          :disabled="(group as any).allowed === false"
           size="small"
-          @change="$emit('toggle', group.name)"
+          @change="$emit('toggle', group.id)"
         />
       </div>
       <div class="group-tools">
@@ -14,8 +15,7 @@
           v-for="tool in group.tools"
           :key="tool.name"
           size="small"
-          :type="group.enabled ? '' : 'info'"
-          :effect="group.enabled ? 'dark' : 'plain'"
+          :class="group.enabled ? 'tool-tag-enabled' : 'tool-tag-disabled'"
         >
           {{ tool.name.split('__').pop() }}
         </el-tag>
@@ -29,15 +29,22 @@
 import type { ToolGroup } from '@/stores/tools'
 
 defineProps<{ groups: ToolGroup[] }>()
-defineEmits<{ toggle: [groupName: string] }>()
+defineEmits<{ toggle: [groupId: string] }>()
 </script>
 
 <style scoped>
 .group-item {
-  margin-bottom: 12px;
-  padding: 8px;
-  background: var(--lc-bg-tertiary);
-  border-radius: 6px;
+  margin-bottom: 8px;
+  padding: 10px;
+  background: var(--lc-glass-bg-hover);
+  border: 1px solid var(--lc-glass-border);
+  border-radius: var(--lc-radius-sm);
+  transition: border-color var(--lc-transition-fast), background var(--lc-transition-fast);
+}
+
+.group-item:hover {
+  border-color: var(--lc-glass-border-hover);
+  background: var(--lc-glass-bg-active);
 }
 
 .group-header {
@@ -62,5 +69,12 @@ defineEmits<{ toggle: [groupName: string] }>()
 .empty {
   color: var(--lc-text-secondary);
   font-size: 12px;
+  opacity: 0.6;
+}
+
+.not-allowed {
+  opacity: 0.4;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.06) !important;
 }
 </style>

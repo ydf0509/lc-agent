@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,7 +9,10 @@ from typing import Any
 @dataclass
 class McpServerStatus:
     name: str
-    command: str
+    type: str = "local"
+    command: str = ""
+    url: str = ""
+    enabled: bool = True
     status: str = "disconnected"
     tools: list[str] = field(default_factory=list)
     tool_schemas: list[dict] = field(default_factory=list)
@@ -16,16 +20,27 @@ class McpServerStatus:
 
 
 class McpManager:
-    """Manages MCP server connections and tool discovery."""
+    """Manages persistent MCP server connections and tool invocation."""
 
     def __init__(self, config: dict[str, dict]):
         self._config = config
         self._servers: dict[str, McpServerStatus] = {}
+        self._sessions: dict[str, Any] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._cleanup_tasks: list[Any] = []
 
         for name, conf in config.items():
+            enabled = conf.get("enabled", True)
+            server_type = conf.get("type", "local")
+            command = conf.get("command", "")
+            if isinstance(command, list):
+                command = " ".join(command)
             self._servers[name] = McpServerStatus(
                 name=name,
-                command=conf.get("command", ""),
+                type=server_type,
+                command=command,
+                url=conf.get("url", ""),
+                enabled=enabled,
             )
 
     @property
@@ -36,44 +51,146 @@ class McpManager:
         return self._servers.get(name)
 
     async def connect_all(self):
-        """Attempt to connect to all configured MCP servers."""
+        """Connect to all configured MCP servers (persistent)."""
         for name, conf in self._config.items():
+            if not conf.get("enabled", True):
+                self._servers[name].status = "disabled"
+                continue
             await self._connect_server(name, conf)
 
     async def _connect_server(self, name: str, conf: dict):
-        """Connect to a single MCP server and discover tools with schemas."""
+        """Establish a persistent connection to a single MCP server."""
+        server_type = conf.get("type", "local")
         self._servers[name].status = "connecting"
+
         try:
-            from mcp import ClientSession, StdioServerParameters
-            from mcp.client.stdio import stdio_client
-
-            env = {**os.environ, **conf.get("env", {})}
-            params = StdioServerParameters(
-                command=conf["command"],
-                args=conf.get("args", []),
-                env=env,
-            )
-
-            async with stdio_client(params) as (read, write):
-                async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    tools_result = await session.list_tools()
-                    tool_names = [t.name for t in tools_result.tools]
-                    tool_schemas = [
-                        {
-                            "name": t.name,
-                            "description": getattr(t, 'description', '') or '',
-                            "input_schema": getattr(t, 'inputSchema', {}) or {},
-                        }
-                        for t in tools_result.tools
-                    ]
-                    self._servers[name].status = "connected"
-                    self._servers[name].tools = tool_names
-                    self._servers[name].tool_schemas = tool_schemas
-
+            if server_type == "sse":
+                await self._connect_sse_persistent(name, conf)
+            elif server_type == "http":
+                await self._connect_http_persistent(name, conf)
+            else:
+                await self._connect_stdio_persistent(name, conf)
         except Exception as e:
             self._servers[name].status = "error"
             self._servers[name].error = str(e)
+
+    async def _connect_stdio_persistent(self, name: str, conf: dict):
+        """Keep a stdio MCP server process alive."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        command_raw = conf.get("command", "")
+        if isinstance(command_raw, list):
+            cmd = command_raw[0]
+            args = command_raw[1:]
+        else:
+            cmd = command_raw
+            args = conf.get("args", [])
+
+        env = {**os.environ, **conf.get("env", {})}
+        params = StdioServerParameters(command=cmd, args=args, env=env)
+
+        cm = stdio_client(params)
+        transport = await cm.__aenter__()
+        read, write = transport
+
+        session_cm = ClientSession(read, write)
+        session = await session_cm.__aenter__()
+        await session.initialize()
+
+        self._cleanup_tasks.append((cm, session_cm))
+        self._sessions[name] = session
+        self._extract_tools(name, await session.list_tools())
+
+    async def _connect_sse_persistent(self, name: str, conf: dict):
+        """Keep an SSE MCP connection alive."""
+        from mcp import ClientSession
+        from mcp.client.sse import sse_client
+
+        url = conf.get("url", "")
+        if not url:
+            raise ValueError(f"SSE server '{name}' requires a 'url' field")
+
+        cm = sse_client(url=url)
+        transport = await cm.__aenter__()
+        read, write = transport
+
+        session_cm = ClientSession(read, write)
+        session = await session_cm.__aenter__()
+        await session.initialize()
+
+        self._cleanup_tasks.append((cm, session_cm))
+        self._sessions[name] = session
+        self._extract_tools(name, await session.list_tools())
+
+    async def _connect_http_persistent(self, name: str, conf: dict):
+        """Keep a StreamableHTTP MCP connection alive."""
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamable_http_client
+
+        url = conf.get("url", "")
+        if not url:
+            raise ValueError(f"HTTP server '{name}' requires a 'url' field")
+
+        cm = streamable_http_client(url=url)
+        transport = await cm.__aenter__()
+        read, write = transport[0], transport[1]
+
+        session_cm = ClientSession(read, write)
+        session = await session_cm.__aenter__()
+        await session.initialize()
+
+        self._cleanup_tasks.append((cm, session_cm))
+        self._sessions[name] = session
+        self._extract_tools(name, await session.list_tools())
+
+    def _extract_tools(self, name: str, tools_result):
+        """Extract tool info from list_tools result."""
+        tool_names = [t.name for t in tools_result.tools]
+        tool_schemas = [
+            {
+                "name": t.name,
+                "description": getattr(t, "description", "") or "",
+                "input_schema": getattr(t, "inputSchema", {}) or {},
+            }
+            for t in tools_result.tools
+        ]
+        self._servers[name].status = "connected"
+        self._servers[name].tools = tool_names
+        self._servers[name].tool_schemas = tool_schemas
+        self._servers[name].error = None
+        self._locks[name] = asyncio.Lock()
+
+    async def call_tool(self, server_name: str, tool_name: str, arguments: dict) -> str:
+        """Invoke a tool on a connected MCP server (serialized per server)."""
+        session = self._sessions.get(server_name)
+        if session is None:
+            return f"MCP server '{server_name}' not connected"
+
+        lock = self._locks.get(server_name)
+        try:
+            if lock:
+                async with lock:
+                    result = await asyncio.wait_for(
+                        session.call_tool(tool_name, arguments),
+                        timeout=60.0,
+                    )
+            else:
+                result = await asyncio.wait_for(
+                    session.call_tool(tool_name, arguments),
+                    timeout=60.0,
+                )
+            parts = []
+            for content in result.content:
+                if hasattr(content, "text"):
+                    parts.append(content.text)
+                else:
+                    parts.append(str(content))
+            return "\n".join(parts) if parts else "(empty result)"
+        except asyncio.TimeoutError:
+            return f"MCP tool '{tool_name}' timed out after 60s"
+        except Exception as e:
+            return f"MCP tool error: {e}"
 
     def get_tools_for_server(self, server_name: str) -> list[str]:
         """Get tool names for a given server."""
@@ -86,7 +203,43 @@ class McpManager:
 
         all_tools = []
         for server in self._servers.values():
-            if server.status == "connected" and server.tool_schemas:
-                tools = create_langchain_tools_from_schemas(server.name, server.tool_schemas)
+            if server.enabled and server.status == "connected" and server.tool_schemas:
+                invoke_fn = self._make_invoke_fn(server.name)
+                tools = create_langchain_tools_from_schemas(server.name, server.tool_schemas, invoke_fn)
                 all_tools.extend(tools)
         return all_tools
+
+    def get_filtered_langchain_tools(self, allowed_servers: list[str] | None) -> list:
+        """Get MCP tools filtered by allowed servers (three-value semantics)."""
+        from lc_agent.mcp.tool_adapter import create_langchain_tools_from_schemas
+
+        all_tools = []
+        for server in self._servers.values():
+            if not server.enabled or server.status != "connected" or not server.tool_schemas:
+                continue
+            if allowed_servers is not None and server.name not in allowed_servers:
+                continue
+            invoke_fn = self._make_invoke_fn(server.name)
+            tools = create_langchain_tools_from_schemas(server.name, server.tool_schemas, invoke_fn)
+            all_tools.extend(tools)
+        return all_tools
+
+    def _make_invoke_fn(self, server_name: str):
+        """Create an async invoke function bound to a specific server."""
+        async def invoke(tool_name: str, arguments: dict) -> str:
+            return await self.call_tool(server_name, tool_name, arguments)
+        return invoke
+
+    async def shutdown(self):
+        """Clean up all persistent connections."""
+        for cm, session_cm in self._cleanup_tasks:
+            try:
+                await session_cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+            try:
+                await cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+        self._sessions.clear()
+        self._cleanup_tasks.clear()

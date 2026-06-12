@@ -32,6 +32,6 @@ defineEmits<{ change: [modelId: string] }>()
 
 <style scoped>
 .model-selector {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 </style>

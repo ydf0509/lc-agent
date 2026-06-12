@@ -64,7 +64,8 @@ def create_langchain_tools_from_schemas(
 
         if invoke_fn:
             async def _invoke(invoke=invoke_fn, tool_name=name, **kwargs):
-                return await invoke(tool_name, kwargs)
+                filtered = {k: v for k, v in kwargs.items() if v is not None}
+                return await invoke(tool_name, filtered)
 
             tool = StructuredTool.from_function(
                 func=None,
@@ -74,8 +75,8 @@ def create_langchain_tools_from_schemas(
                 args_schema=args_model,
             )
         else:
-            def _placeholder(**kwargs):
-                return f"MCP tool {full_name} not connected"
+            def _placeholder(full=full_name, **kwargs):
+                return f"MCP tool {full} not connected"
 
             tool = StructuredTool.from_function(
                 func=_placeholder,

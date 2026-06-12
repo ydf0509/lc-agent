@@ -1,191 +1,152 @@
-# lc_agent
+# lc-agent
 
-基于 LangChain / LangGraph 的智能体框架，自带炫酷深色 Web UI。
+基于 LangChain / LangGraph 的 AI Agent 框架，内置 Web UI。
 
-用户导入框架即可拥有完整的 Agent 运行环境 —— 无需自己写前端。
+## 定位
 
-## 特性
+lc-agent 是一个**可导入的框架**，用户在自己的项目中 `import lc_agent` 来开发自定义 Agent 应用，无需 clone 或修改框架代码。
 
-- **流式对话** — 通过 WebSocket 实时流式输出 LLM 回复
-- **工具系统** — `@tool` 装饰器 + 分组管理 + 三值语义（全选/全关/指定）
-- **MCP 集成** — 配置声明 MCP 服务器，启动后自动连接并发现工具
-- **Skills 注入** — 扫描 `SKILL.md` 文件，自动注入到系统提示词
-- **Agent 预设** — 页面可视化创建/编辑/切换 Agent（prompt + tools + skills 组合）
-- **Human-in-the-Loop** — 危险工具自动暂停，等待用户审批
-- **多会话管理** — 多轮对话持久化，随时切换/恢复完整历史
-- **代码注册** — `app.add_agent(name, graph)` 注册自定义 CompiledStateGraph
-- **深色主题** — Vue 3 + Element Plus，三栏布局，开箱即用
+## 功能
 
-## 快速开始
+- 内置 FastAPI 服务器 + WebSocket 流式对话
+- Vue 3 暗色主题 Web UI（Element Plus）
+- LangGraph ReAct Agent 引擎
+- 工具注册表（`@tool` 装饰器，支持分组 + 分组描述）
+- SKILL.md 技能扫描（支持 `metadata.group` 分组）
+- MCP 服务器管理 + 工具适配
+- 会话持久化（SQLModel + SQLite）
+- Human-in-the-loop 审批机制
+- Agent 预设管理（代码注册 / 页面创建）
 
-### 安装
+## 安装
 
 ```bash
+# Python >= 3.12
 pip install -e .
 ```
 
-### 配置
+## 快速开始
 
-创建 `config.jsonc`：
-
-```jsonc
-{
-  "provider": {
-    "deepseek": {
-      "api_key": "{env:DEEPSEEK_API_KEY}",
-      "base_url": "https://api.deepseek.com",
-      "models": [
-        {"id": "deepseek-chat", "context_limit": 64000}
-      ]
-    }
-  },
-  "agent": {
-    "system_prompt": "你是一个有用的AI助手。",
-    "default_model": "deepseek-chat"
-  }
-}
-```
-
-支持环境变量替换（`{env:VAR_NAME}`），兼容 OpenAI / DeepSeek / Ollama / LiteLLM 等任何 OpenAI 兼容接口。
-
-### 启动
+### 作为独立聊天工具（无 tools）
 
 ```bash
+cp config.example.jsonc config.jsonc
+# 编辑 config.jsonc 配置 LLM provider
 lc-agent
-# 或
-python -m lc_agent
+# 访问 http://127.0.0.1:8000
 ```
 
-打开浏览器访问 http://localhost:8000 即可开始对话。
-
-### 命令行参数
-
-```bash
-lc-agent --host 0.0.0.0 --port 8080 --config ./my-config.jsonc
-```
-
-## 作为框架使用
+### 作为框架使用（在用户项目中）
 
 ```python
 from lc_agent import LcAgentApp, load_config, tool
 
-# 定义工具
-@tool(group="math")
-def add(a: int, b: int) -> int:
-    """两数相加"""
-    return a + b
+# 1. 注册自定义工具
+@tool(group="my_tools", group_description="我的工具")
+def my_tool(query: str) -> str:
+    """工具描述"""
+    return f"result: {query}"
 
-# 加载配置并启动
-config = load_config("config.jsonc")
-app = LcAgentApp(config)
+# 2. 加载配置并启动
+config = load_config(config_path="./config.jsonc")
+app = LcAgentApp(config, host="127.0.0.1", port=8001)
 
-# 注册自定义 Agent（可选）
-from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
-
-my_llm = ChatOpenAI(model="gpt-4o", api_key="...")
-my_graph = create_react_agent(my_llm, tools=[add])
-app.add_agent("my_math_agent", my_graph, description="数学计算专用")
+# 3. 可选：注册自定义 CompiledGraph Agent
+from my_agents import build_my_agent
+app.add_agent("my_agent", build_my_agent(config), description="自定义Agent")
 
 app.run()
 ```
 
-## 配置详解
+## 配置
 
-### Provider（LLM 提供商）
+使用 `config.jsonc`（支持注释 + `{env:VAR}` 环境变量替换）：
 
 ```jsonc
 {
   "provider": {
-    "<provider_name>": {
-      "api_key": "your-key",
-      "base_url": "https://api.example.com/v1",  // 可选，用于自定义端点
-      "models": [
-        {"id": "model-id", "context_limit": 8000}
-      ]
+    "litellm": {
+      "api_key": "{env:LLM_API_KEY}",
+      "base_url": "http://localhost:4000/v1",
+      "models": [{"id": "deepseek-v4", "context_limit": 64000}]
     }
-  }
+  },
+  "agent": {
+    "system_prompt": "你是一个有用的AI助手",
+    "default_model": "deepseek-v4"
+  },
+  "database": {
+    "url": "sqlite+aiosqlite:///./data.db",
+    "checkpoint_path": "./checkpoints.db"
+  },
+  "skills": {"directory": "./myskills"},
+  "mcp_servers": {}
 }
 ```
 
-### MCP 服务器
+## 工具注册
 
-```jsonc
-{
-  "mcp_servers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
-      "env": {}
-    }
-  }
-}
+```python
+from lc_agent import tool
+
+@tool(group="file_ops", group_description="文件操作")
+def read_file(path: str) -> str:
+    """读取文件"""
+    return open(path).read()
 ```
 
-### Skills
+- `group`: ASCII 标识符（`^[a-zA-Z0-9_-]+$`），作为工具名前缀
+- `group_description`: 人类可读的分组展示名（支持中文）
+- 工具名格式: `{group}__{func_name}`
 
-在 `skills/` 目录下放置 `SKILL.md` 文件：
+## Skills
 
-```markdown
+放在配置的 `skills.directory` 下，遵循 agentskills.io 规范：
+
+```
+myskills/
+└── my-skill/           # 文件夹名 = name 字段
+    └── SKILL.md
+```
+
+SKILL.md 格式：
+
+```yaml
 ---
-name: code-review
-description: 代码审查技能
+name: my-skill
+description: 技能描述
+metadata:
+  group: "技能组名"
 ---
-
-# 代码审查
-
-审查时请关注...
+# 技能内容
+...
 ```
-
-### Agent 预设
-
-通过 Web UI 创建，或通过 API：
-
-```bash
-curl -X POST http://localhost:8000/api/agents \
-  -H "Content-Type: application/json" \
-  -d '{"name": "代码助手", "system_prompt": "你是代码专家", "default_model": "deepseek-chat"}'
-```
-
-## API 文档
-
-启动后访问 http://localhost:8000/api/docs 查看完整 OpenAPI 文档。
-
-主要端点：
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/health` | GET | 健康检查 |
-| `/api/models` | GET | 可用模型列表 |
-| `/api/tools` | GET | 已注册工具 |
-| `/api/tools/groups` | GET | 工具分组 |
-| `/api/agents` | GET/POST/PUT/DELETE | Agent 预设 CRUD |
-| `/api/sessions` | GET/POST/PUT/DELETE | 会话管理 |
-| `/api/mcp` | GET | MCP 服务器状态 |
-| `/api/skills` | GET | Skills 列表 |
-| `/ws/chat` | WebSocket | 实时对话 |
-
-## 技术栈
-
-- **后端**: FastAPI + SQLModel + LangChain + LangGraph
-- **前端**: Vue 3 + Element Plus + Pinia + Vite
-- **数据库**: SQLite (异步) + LangGraph Checkpoint
-- **协议**: WebSocket (流式) + REST API
 
 ## 开发
 
 ```bash
-# 安装开发依赖
 pip install -e ".[dev]"
+pytest
+```
 
-# 运行测试
-pytest tests/ -q
+### 前端开发
 
-# 前端开发（热更新）
+```bash
 cd frontend
 npm install
-npm run dev
+npm run dev      # 开发模式（热更新，代理到 :8000）
+npm run build    # 构建到 lc_agent/web/dist/
 ```
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| AI 引擎 | LangGraph `create_react_agent` |
+| 后端 | FastAPI + SQLModel + asyncio |
+| 前端 | Vue 3 + TypeScript + Element Plus + Vite |
+| 数据库 | SQLite (aiosqlite) |
+| 通信 | WebSocket (流式) + REST API |
 
 ## License
 

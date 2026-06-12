@@ -8,9 +8,11 @@ from lc_agent.tools import tool, ToolRegistry
 @pytest.fixture(autouse=True)
 def reset_registry():
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
     yield
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
 
 
@@ -59,8 +61,8 @@ async def test_get_tool_groups(app_with_tools):
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 2
-        group_names = [g["name"] for g in data]
-        assert "web" in group_names
-        assert "filesystem" in group_names
-        web_group = next(g for g in data if g["name"] == "web")
+        group_ids = [g["id"] for g in data]
+        assert "web" in group_ids
+        assert "filesystem" in group_ids
+        web_group = next(g for g in data if g["id"] == "web")
         assert len(web_group["tools"]) == 2

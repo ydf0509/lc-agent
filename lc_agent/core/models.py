@@ -19,6 +19,9 @@ class AgentPreset(BaseModel):
       None  = all allowed (default)
       []    = all disabled
       ["a"] = only specified items allowed
+
+    source: "builtin" | "code" | "user"
+    default_enabled: controls whether tools/MCP/skills default to ON or OFF in the UI
     """
 
     id: str
@@ -31,3 +34,5 @@ class AgentPreset(BaseModel):
     allowed_skills: list[str] | None = None
 
     dangerous_tools: list[str] = Field(default_factory=list)
+    source: str = "user"
+    default_enabled: bool = True

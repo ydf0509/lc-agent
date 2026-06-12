@@ -19,6 +19,8 @@ class AgentEngine:
         self._models: list[ModelInfo] = self._parse_models(config)
         self._presets: dict[str, AgentPreset] = {}
         self._custom_presets: dict[str, AgentPreset] = {}
+        self._agent_mcp_gen: dict[str, int] = {}
+        self._mcp_generation: int = 0
 
     def _parse_models(self, config: dict) -> list[ModelInfo]:
         """Extract ModelInfo list from config."""
@@ -39,15 +41,51 @@ class AgentEngine:
         """Return available models."""
         return self._models
 
-    def get_default_preset(self) -> AgentPreset:
-        """Create default preset from config."""
+    BUILTIN_IDS = {"__chat__", "__empty__", "__power__"}
+
+    def get_builtin_presets(self) -> list[AgentPreset]:
+        """Return the three built-in agent presets."""
         agent_conf = self.config.get("agent", {})
-        return AgentPreset(
-            id="__default__",
-            name="Default Agent",
-            system_prompt=agent_conf.get("system_prompt", "You are a helpful assistant."),
-            default_model=agent_conf.get("default_model", ""),
-        )
+        default_model = agent_conf.get("default_model", "")
+        return [
+            AgentPreset(
+                id="__chat__",
+                name="Chat",
+                system_prompt="You are a helpful assistant. Respond in the user's language.",
+                default_model=default_model,
+                allowed_tool_groups=[],
+                allowed_mcp_servers=[],
+                allowed_skills=[],
+                source="builtin",
+                default_enabled=False,
+            ),
+            AgentPreset(
+                id="__empty__",
+                name="Empty",
+                system_prompt=agent_conf.get("system_prompt", "You are a helpful assistant."),
+                default_model=default_model,
+                allowed_tool_groups=None,
+                allowed_mcp_servers=None,
+                allowed_skills=None,
+                source="builtin",
+                default_enabled=False,
+            ),
+            AgentPreset(
+                id="__power__",
+                name="Power",
+                system_prompt=agent_conf.get("system_prompt", "You are a helpful assistant."),
+                default_model=default_model,
+                allowed_tool_groups=None,
+                allowed_mcp_servers=None,
+                allowed_skills=None,
+                source="builtin",
+                default_enabled=True,
+            ),
+        ]
+
+    def get_default_preset(self) -> AgentPreset:
+        """Return the default agent (Chat - safest)."""
+        return self.get_builtin_presets()[0]
 
     def build_agent(self, preset: AgentPreset | None = None):
         """Build a LangGraph ReAct agent from preset."""
@@ -65,6 +103,11 @@ class AgentEngine:
                 system_prompt = f"{system_prompt}\n\n# Available Skills\n\n{skills_text}"
 
         tools = self.tool_registry.get_filtered_tools(preset.allowed_tool_groups)
+
+        if hasattr(self, '_mcp_manager') and self._mcp_manager:
+            mcp_tools = self._mcp_manager.get_filtered_langchain_tools(preset.allowed_mcp_servers)
+            tools = tools + mcp_tools
+
         model_info = self._find_model(preset.default_model)
         llm = self._create_llm(model_info, preset.default_model)
 
@@ -97,8 +140,9 @@ class AgentEngine:
                 base_url=model_info.base_url or None,
                 api_key=model_info.api_key or "not-set",
                 temperature=0.7,
+                stream_usage=True,
             )
-        return ChatOpenAI(model=model_id, api_key="not-set")
+        return ChatOpenAI(model=model_id, api_key="not-set", stream_usage=True)
 
     def _find_model(self, model_id: str) -> ModelInfo | None:
         """Find model info by ID."""
@@ -107,12 +151,33 @@ class AgentEngine:
                 return m
         return None
 
-    async def chat(self, message: str, thread_id: str, preset_id: str = "__default__") -> str:
-        """Send a message and get a response (non-streaming)."""
-        agent = self._agents.get(preset_id)
-        if agent is None:
-            preset = self._presets.get(preset_id) or self.get_default_preset()
+    def _resolve_preset(self, preset_id: str) -> AgentPreset:
+        """Resolve a preset ID to an AgentPreset object."""
+        if preset_id in self.BUILTIN_IDS:
+            for bp in self.get_builtin_presets():
+                if bp.id == preset_id:
+                    return bp
+        if preset_id in self._custom_presets:
+            return self._custom_presets[preset_id]
+        if preset_id in self._presets:
+            return self._presets[preset_id]
+        return self.get_default_preset()
+
+    def _get_or_build_agent(self, preset_id: str):
+        """Get cached agent or build a new one. Rebuilds if MCP state changed."""
+        preset = self._resolve_preset(preset_id)
+        mcp_gen = getattr(self, '_mcp_generation', 0)
+        cached = self._agents.get(preset_id)
+        cached_gen = self._agent_mcp_gen.get(preset_id, -1)
+        if cached is None or cached_gen != mcp_gen:
             agent = self.build_agent(preset)
+            self._agent_mcp_gen[preset_id] = mcp_gen
+            return agent
+        return cached
+
+    async def chat(self, message: str, thread_id: str, preset_id: str = "__chat__") -> str:
+        """Send a message and get a response (non-streaming)."""
+        agent = self._get_or_build_agent(preset_id)
 
         config = {"configurable": {"thread_id": thread_id}}
         result = await agent.ainvoke(
@@ -124,12 +189,9 @@ class AgentEngine:
             return messages[-1].content
         return ""
 
-    async def chat_stream(self, message: str, thread_id: str, preset_id: str = "__default__") -> AsyncIterator[dict]:
+    async def chat_stream(self, message: str, thread_id: str, preset_id: str = "__chat__") -> AsyncIterator[dict]:
         """Stream chat responses as events."""
-        agent = self._agents.get(preset_id)
-        if agent is None:
-            preset = self._presets.get(preset_id) or self.get_default_preset()
-            agent = self.build_agent(preset)
+        agent = self._get_or_build_agent(preset_id)
 
         config = {"configurable": {"thread_id": thread_id}}
         async for event in agent.astream_events(
@@ -138,6 +200,25 @@ class AgentEngine:
             version="v2",
         ):
             yield event
+
+    async def generate_title(self, user_message: str, model_id: str = "") -> str:
+        """Generate a short conversation title from the user's first message."""
+        model_info = self._find_model(model_id) if model_id else None
+        if model_info is None and self._models:
+            model_info = self._models[0]
+        if model_info is None:
+            return user_message[:20]
+
+        llm = self._create_llm(model_info, model_info.id)
+        try:
+            resp = await llm.ainvoke([
+                {"role": "system", "content": "用10个字以内为这段对话生成一个简洁标题。只输出标题，不要标点符号和引号。"},
+                {"role": "user", "content": user_message[:200]},
+            ])
+            title = resp.content.strip().strip('"\'""').strip()
+            return title[:30] if title else user_message[:20]
+        except Exception:
+            return user_message[:20]
 
     def get_presets(self) -> list[AgentPreset]:
         """Return all agent presets (including default and custom)."""
@@ -159,7 +240,7 @@ class AgentEngine:
         return updated
 
     def delete_preset(self, preset_id: str) -> bool:
-        """Delete a preset. Cannot delete default."""
-        if preset_id == "__default__":
+        """Delete a preset. Cannot delete builtin."""
+        if preset_id in self.BUILTIN_IDS:
             return False
         return self._presets.pop(preset_id, None) is not None

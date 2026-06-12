@@ -22,9 +22,12 @@ class SkillsConfig(BaseModel):
 
 
 class McpServerConfig(BaseModel):
-    command: str
+    type: str = "local"  # "local", "sse", "http"
+    command: str | list[str] = ""
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
+    url: str = ""
+    enabled: bool = True
 
 
 class AppConfig(BaseModel):

@@ -15,13 +15,16 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
 export const api = {
   health: () => fetchApi<{ status: string; version: string }>('/health'),
 
-  getTools: () => fetchApi<{ name: string; group: string; description: string }[]>('/tools'),
-  getToolGroups: () => fetchApi<{ name: string; tools: { name: string; description: string }[] }[]>('/tools/groups'),
+  getTools: () => fetchApi<{ name: string; group: string; group_description: string; description: string }[]>('/tools'),
+  getToolGroups: () => fetchApi<{ id: string; description: string; tools: { name: string; description: string }[]; enabled: boolean }[]>('/tools/groups'),
+  toggleToolGroup: (groupId: string) => fetchApi<{ id: string; enabled: boolean }>(`/tools/groups/${groupId}/toggle`, { method: 'POST' }),
 
   getModels: () => fetchApi<{ id: string; provider: string; base_url: string; context_limit: number }[]>('/models'),
 
   getMcpServers: () => fetchApi<any[]>('/mcp'),
+  toggleMcpServer: (name: string) => fetchApi<{ name: string; enabled: boolean }>(`/mcp/${name}/toggle`, { method: 'POST' }),
   getSkills: () => fetchApi<any[]>('/skills'),
+  toggleSkill: (name: string) => fetchApi<{ name: string; enabled: boolean }>(`/skills/${name}/toggle`, { method: 'POST' }),
 
   getAgents: () => fetchApi<any[]>('/agents'),
   createAgent: (data: object) => fetchApi<any>('/agents', { method: 'POST', body: JSON.stringify(data) }),
@@ -35,4 +38,6 @@ export const api = {
     fetchApi<any>(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSession: (id: string) =>
     fetchApi<void>(`/sessions/${id}`, { method: 'DELETE' }),
+  getSessionMessages: (id: string) =>
+    fetchApi<any[]>(`/sessions/${id}/messages`),
 }

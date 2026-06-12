@@ -9,11 +9,13 @@ from lc_agent.tools.registry import ToolRegistry
 @pytest.fixture(autouse=True)
 async def setup():
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
     reset_engine()
     await init_db("sqlite+aiosqlite:///:memory:")
     yield
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
     reset_engine()
 

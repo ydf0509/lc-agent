@@ -9,6 +9,7 @@ class TestToolDecorator:
         """Reset global registry before each test."""
         ToolRegistry._instance = None
         ToolRegistry._global_tools = {}
+        ToolRegistry._group_descriptions = {}
 
     def test_registers_function_as_tool(self):
         @tool

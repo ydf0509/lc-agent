@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api/http'
+import { useAgentsStore } from '@/stores/agents'
 
 export interface Session {
   id: string
@@ -28,7 +29,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
   }
 
-  async function createSession(agentId: string = '__default__', model: string = '') {
+  async function createSession(agentId: string = '__chat__', model: string = '') {
     const created = await api.createSession({ agent_id: agentId, model })
     sessions.value.unshift({
       ...created,
@@ -56,9 +57,37 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (sess) sess.title = title
   }
 
+  function updateTitleLocal(id: string, title: string) {
+    const sess = sessions.value.find(s => s.id === id)
+    if (sess) sess.title = title
+  }
+
+  const groupedByAgent = computed(() => {
+    const agentsStore = useAgentsStore()
+    const groups: Record<string, { agentName: string; agentSource: string; sessions: Session[] }> = {}
+    for (const s of sessions.value) {
+      const key = s.agent_id || '__chat__'
+      if (!groups[key]) {
+        const agent = agentsStore.agents.find(a => a.id === key)
+        groups[key] = {
+          agentName: agentsStore.getAgentName(key),
+          agentSource: agent?.source || 'user',
+          sessions: [],
+        }
+      }
+      groups[key].sessions.push(s)
+    }
+    return Object.entries(groups).map(([agentId, data]) => ({
+      agentId,
+      agentName: data.agentName,
+      agentSource: data.agentSource,
+      sessions: data.sessions,
+    }))
+  })
+
   function selectSession(id: string) {
     currentSessionId.value = id
   }
 
-  return { sessions, currentSessionId, currentSession, init, createSession, deleteSession, updateTitle, selectSession }
+  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, deleteSession, updateTitle, updateTitleLocal, selectSession }
 })

@@ -10,9 +10,11 @@ from lc_agent.tools.registry import ToolRegistry
 @pytest.fixture(autouse=True)
 def reset_registry():
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
     yield
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
 
 

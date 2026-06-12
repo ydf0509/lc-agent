@@ -12,9 +12,11 @@ def reset_registry():
     """Reset tool registry between tests."""
     ToolRegistry._instance = None
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     yield
     ToolRegistry._instance = None
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
 
 
 @pytest.fixture

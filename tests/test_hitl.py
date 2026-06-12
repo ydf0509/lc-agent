@@ -9,6 +9,7 @@ from lc_agent.tools.registry import ToolRegistry, tool
 @pytest.fixture
 def hitl_engine():
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
 
     @tool(group="filesystem")
@@ -32,6 +33,7 @@ def hitl_engine():
     engine = AgentEngine(config)
     yield engine
     ToolRegistry._global_tools = {}
+    ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
 
 
