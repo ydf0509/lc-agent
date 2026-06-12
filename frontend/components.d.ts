@@ -36,6 +36,7 @@ declare module 'vue' {
     RightPanel: typeof import('./src/components/layout/RightPanel.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    TokenUsagePanel: typeof import('./src/components/chat/TokenUsagePanel.vue')['default']
     ToolCallCard: typeof import('./src/components/chat/ToolCallCard.vue')['default']
     ToolGroupPanel: typeof import('./src/components/panels/ToolGroupPanel.vue')['default']
   }

@@ -66,25 +66,58 @@ class LcAgentApp:
             asyncio.create_task(_connect_mcp_background())
 
     def _setup_websocket_route(self):
+        import asyncio
+
+        async def _ws_loop(websocket: WebSocket, tid: str):
+            streaming_task: asyncio.Task | None = None
+            try:
+                while True:
+                    if streaming_task and not streaming_task.done():
+                        recv_coro = websocket.receive_json()
+                        recv_task = asyncio.ensure_future(recv_coro)
+                        done, _ = await asyncio.wait(
+                            [recv_task, streaming_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if recv_task in done:
+                            data = recv_task.result()
+                            if data.get("type") == "cancel":
+                                self._ws_handler._cancel_flags[tid] = True
+                        if streaming_task in done:
+                            streaming_task = None
+                            if recv_task not in done:
+                                recv_task.cancel()
+                                try:
+                                    await recv_task
+                                except (asyncio.CancelledError, Exception):
+                                    pass
+                    else:
+                        data = await websocket.receive_json()
+                        msg_type = data.get("type", "message")
+                        if msg_type == "cancel":
+                            continue
+                        streaming_task = asyncio.create_task(
+                            self._ws_handler.handle_message(websocket, tid, data)
+                        )
+            except WebSocketDisconnect:
+                if streaming_task and not streaming_task.done():
+                    streaming_task.cancel()
+                await self._ws_handler.disconnect(tid)
+            except Exception as e:
+                print(f"[WS] Loop error: {e}")
+                if streaming_task and not streaming_task.done():
+                    streaming_task.cancel()
+                await self._ws_handler.disconnect(tid)
+
         @self.fastapi_app.websocket("/ws/chat/{thread_id}")
         async def websocket_chat(websocket: WebSocket, thread_id: str):
             tid = await self._ws_handler.connect(websocket, thread_id)
-            try:
-                while True:
-                    data = await websocket.receive_json()
-                    await self._ws_handler.handle_message(websocket, tid, data)
-            except WebSocketDisconnect:
-                await self._ws_handler.disconnect(tid)
+            await _ws_loop(websocket, tid)
 
         @self.fastapi_app.websocket("/ws/chat")
         async def websocket_chat_auto(websocket: WebSocket):
             tid = await self._ws_handler.connect(websocket)
-            try:
-                while True:
-                    data = await websocket.receive_json()
-                    await self._ws_handler.handle_message(websocket, tid, data)
-            except WebSocketDisconnect:
-                await self._ws_handler.disconnect(tid)
+            await _ws_loop(websocket, tid)
 
     async def _load_presets_from_db(self):
         """Load user-created presets from database on startup."""

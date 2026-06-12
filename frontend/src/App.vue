@@ -5,6 +5,7 @@
       :connected="chatStore.isConnected"
       @edit-agent="editCurrentAgent"
       @new-agent="createNewAgent"
+      @new-chat="handleNewChat"
     />
 
     <div class="app-body">

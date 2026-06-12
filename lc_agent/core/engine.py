@@ -138,8 +138,9 @@ class AgentEngine:
                 base_url=model_info.base_url or None,
                 api_key=model_info.api_key or "not-set",
                 temperature=0.7,
+                stream_usage=True,
             )
-        return ChatOpenAI(model=model_id, api_key="not-set")
+        return ChatOpenAI(model=model_id, api_key="not-set", stream_usage=True)
 
     def _find_model(self, model_id: str) -> ModelInfo | None:
         """Find model info by ID."""

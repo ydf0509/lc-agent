@@ -4,13 +4,36 @@ import { ChatWebSocket, type WsMessage } from '@/api/websocket'
 import { useSessionsStore } from '@/stores/sessions'
 import { api } from '@/api/http'
 
+export interface LlmRoundUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  cacheReadTokens: number
+  reasoningTokens: number
+  duration?: number
+}
+
+export interface MessageUsage {
+  rounds: LlmRoundUsage[]
+  toolCallCount: number
+  totalDuration?: number
+}
+
+export interface ContentSegment {
+  type: 'text' | 'tool'
+  text?: string
+  toolCall?: ToolCall
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'tool'
   content: string
   timestamp: number
   toolCalls?: ToolCall[]
+  segments?: ContentSegment[]
   isStreaming?: boolean
+  usage?: MessageUsage
 }
 
 export interface ToolCall {
@@ -18,6 +41,9 @@ export interface ToolCall {
   args?: Record<string, any>
   result?: string
   status: 'pending' | 'running' | 'done' | 'error'
+  startTime?: number
+  duration?: number
+  resultLength?: number
 }
 
 export interface InterruptInfo {
@@ -38,31 +64,70 @@ export const useChatStore = defineStore('chat', () => {
   async function connect(existingThreadId?: string) {
     ws.value = new ChatWebSocket()
 
+    let streamStartTime = 0
+    let currentRoundStart = 0
+
     ws.value.on('token', (msg: WsMessage) => {
       if (!isStreaming.value) {
         isStreaming.value = true
+        streamStartTime = Date.now()
+        currentRoundStart = Date.now()
         messages.value.push({
           id: crypto.randomUUID(),
           role: 'assistant',
           content: '',
           timestamp: Date.now(),
           isStreaming: true,
+          segments: [],
+          usage: { rounds: [], toolCallCount: 0 },
         })
       }
       const last = messages.value[messages.value.length - 1]
       if (last && last.role === 'assistant') {
         last.content += msg.content || ''
+        if (!last.segments) last.segments = []
+        const lastSeg = last.segments[last.segments.length - 1]
+        if (lastSeg && lastSeg.type === 'text') {
+          lastSeg.text = (lastSeg.text || '') + (msg.content || '')
+        } else {
+          last.segments.push({ type: 'text', text: msg.content || '' })
+        }
       }
     })
+
+    ws.value.on('llm_usage', (msg: WsMessage) => {
+      const last = messages.value[messages.value.length - 1]
+      if (last?.usage) {
+        const roundDuration = currentRoundStart ? Date.now() - currentRoundStart : undefined
+        last.usage.rounds.push({
+          inputTokens: msg.input_tokens || 0,
+          outputTokens: msg.output_tokens || 0,
+          totalTokens: msg.total_tokens || 0,
+          cacheReadTokens: msg.cache_read_tokens || 0,
+          reasoningTokens: 0,
+          duration: roundDuration,
+        })
+        currentRoundStart = Date.now()
+      }
+    })
+
 
     ws.value.on('tool_call', (msg: WsMessage) => {
       const last = messages.value[messages.value.length - 1]
       if (last && last.role === 'assistant') {
         if (!last.toolCalls) last.toolCalls = []
-        last.toolCalls.push({
+        const tc: ToolCall = {
           name: msg.name || '',
+          args: msg.args,
           status: 'running',
-        })
+          startTime: Date.now(),
+        }
+        last.toolCalls.push(tc)
+        if (!last.segments) last.segments = []
+        last.segments.push({ type: 'tool', toolCall: tc })
+        if (last.usage) {
+          last.usage.toolCallCount++
+        }
       }
     })
 
@@ -73,6 +138,8 @@ export const useChatStore = defineStore('chat', () => {
         if (tc) {
           tc.result = msg.result
           tc.status = 'done'
+          tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
+          tc.resultLength = msg.result?.length || 0
         }
       }
     })
@@ -84,7 +151,31 @@ export const useChatStore = defineStore('chat', () => {
       }
     })
 
-    ws.value.on('done', () => {
+    ws.value.on('done', (msg: WsMessage) => {
+      isStreaming.value = false
+      const last = messages.value[messages.value.length - 1]
+      if (last) {
+        last.isStreaming = false
+        if (last.usage && streamStartTime) {
+          last.usage.totalDuration = Date.now() - streamStartTime
+        }
+        const usageData = (msg as any).usage as any[] | undefined
+        if (usageData && usageData.length > 0 && last.usage) {
+          if (last.usage.rounds.length === 0) {
+            last.usage.rounds = usageData.map((r: any) => ({
+              inputTokens: r.input_tokens || 0,
+              outputTokens: r.output_tokens || 0,
+              totalTokens: r.total_tokens || 0,
+              cacheReadTokens: r.cache_read_tokens || 0,
+              reasoningTokens: r.reasoning_tokens || 0,
+              duration: r.duration_ms || undefined,
+            }))
+          }
+        }
+      }
+    })
+
+    ws.value.on('cancelled', () => {
       isStreaming.value = false
       const last = messages.value[messages.value.length - 1]
       if (last) last.isStreaming = false
@@ -168,7 +259,7 @@ export const useChatStore = defineStore('chat', () => {
           if (msg.tool_calls && msg.tool_calls.length > 0) {
             chatMsg.toolCalls = msg.tool_calls.map((tc: any) => ({
               name: tc.name,
-              args: tc.args,
+              args: tc.args || {},
               status: 'done' as const,
             }))
           }
@@ -178,7 +269,9 @@ export const useChatStore = defineStore('chat', () => {
           if (lastAssistant?.toolCalls) {
             const tc = lastAssistant.toolCalls.find(t => t.name === msg.name && !t.result)
             if (tc) {
-              tc.result = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+              const resultStr = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+              tc.result = resultStr
+              tc.resultLength = resultStr.length
             }
           }
         }
@@ -186,6 +279,12 @@ export const useChatStore = defineStore('chat', () => {
       messages.value = loaded
     } catch (e) {
       console.error('[Chat] Failed to load messages:', e)
+    }
+  }
+
+  function stopGeneration() {
+    if (ws.value && isStreaming.value) {
+      ws.value.sendCancel()
     }
   }
 
@@ -208,6 +307,7 @@ export const useChatStore = defineStore('chat', () => {
     connect,
     loadMessages,
     sendMessage,
+    stopGeneration,
     respondToInterrupt,
     clearMessages,
     disconnect,

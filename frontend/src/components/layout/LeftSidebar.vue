@@ -9,13 +9,6 @@
       </button>
     </div>
 
-    <button class="new-chat-btn" :class="{ 'icon-only': collapsed }" @click="emit('newChat')" title="新对话">
-      <span class="btn-icon">+</span>
-      <transition name="fade">
-        <span v-if="!collapsed" class="btn-text">新对话</span>
-      </transition>
-    </button>
-
     <div v-if="!collapsed" class="session-scroll">
       <div v-for="group in sessionsStore.groupedByAgent" :key="group.agentId" class="agent-group">
         <div class="agent-group-header" @click="toggleGroup(group.agentId)">
@@ -165,10 +158,8 @@ function formatTime(iso: string): string {
 <style scoped>
 .left-sidebar {
   width: 270px;
-  background: linear-gradient(180deg, rgba(15, 20, 30, 0.85) 0%, rgba(10, 14, 22, 0.92) 100%);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: #0d1117;
+  border-right: 1px solid #21262d;
   display: flex;
   flex-direction: column;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -183,18 +174,16 @@ function formatTime(iso: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 14px 8px;
+  padding: 14px 14px 10px;
   flex-shrink: 0;
+  border-bottom: 1px solid #21262d;
 }
 
 .sidebar-brand {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  background: linear-gradient(135deg, #58a6ff 0%, #a78bfa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #c9d1d9;
+  letter-spacing: 0.3px;
 }
 
 .toggle-btn {
@@ -204,17 +193,17 @@ function formatTime(iso: string): string {
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--lc-text-secondary);
+  color: #8b949e;
   cursor: pointer;
-  font-size: 16px;
-  transition: all 0.2s ease;
+  font-size: 14px;
+  transition: all 0.15s ease;
 }
 
 .toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--lc-text-primary);
+  background: #21262d;
+  color: #c9d1d9;
 }
 
 .toggle-icon {
@@ -226,82 +215,54 @@ function formatTime(iso: string): string {
   transform: rotate(180deg);
 }
 
-.new-chat-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 4px 12px 16px;
-  padding: 10px 16px;
-  border: 1px solid rgba(88, 166, 255, 0.25);
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(88, 166, 255, 0.1) 0%, rgba(167, 139, 250, 0.08) 100%);
-  color: #7ec8ff;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-}
-
-.new-chat-btn:hover {
-  background: linear-gradient(135deg, rgba(88, 166, 255, 0.18) 0%, rgba(167, 139, 250, 0.14) 100%);
-  border-color: rgba(88, 166, 255, 0.4);
-  box-shadow: 0 0 16px rgba(88, 166, 255, 0.15);
-  transform: translateY(-1px);
-}
-
-.new-chat-btn.icon-only {
-  margin: 4px 8px 16px;
-  padding: 10px;
-  border-radius: 12px;
-}
-
-.btn-icon {
-  font-size: 16px;
-  font-weight: 300;
-  line-height: 1;
-}
-
-.btn-text {
-  white-space: nowrap;
-}
 
 .session-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 12px;
+  padding: 8px 0;
+}
+
+.session-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.session-scroll::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 4px;
 }
 
 .agent-group {
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .agent-group-header {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px 12px;
+  gap: 8px;
+  padding: 11px 14px;
+  margin: 0 8px 4px;
   cursor: pointer;
-  border-radius: 10px;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   user-select: none;
-  background: linear-gradient(135deg, rgba(88, 166, 255, 0.08) 0%, rgba(167, 139, 250, 0.06) 100%);
-  border: 1px solid rgba(88, 166, 255, 0.15);
-  margin-bottom: 4px;
+  background: linear-gradient(135deg, #1a3052 0%, #162544 100%);
+  border: 1px solid #234876;
+  border-radius: 8px;
+  position: sticky;
+  top: 4px;
+  z-index: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  margin-top: 8px;
 }
 
 .agent-group-header:hover {
-  background: linear-gradient(135deg, rgba(88, 166, 255, 0.14) 0%, rgba(167, 139, 250, 0.1) 100%);
-  border-color: rgba(88, 166, 255, 0.25);
-  box-shadow: 0 2px 12px rgba(88, 166, 255, 0.08);
+  background: linear-gradient(135deg, #1f3a62 0%, #1a2d50 100%);
+  border-color: #2d5a9e;
 }
 
 .chevron {
-  font-size: 13px;
-  color: rgba(167, 139, 250, 0.7);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  width: 14px;
+  font-size: 11px;
+  color: #8b949e;
+  transition: transform 0.2s ease;
+  width: 12px;
   text-align: center;
 }
 
@@ -310,111 +271,97 @@ function formatTime(iso: string): string {
 }
 
 .agent-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .dot-builtin {
-  background: linear-gradient(135deg, #58a6ff, #a78bfa);
-  box-shadow: 0 0 6px rgba(88, 166, 255, 0.4);
+  background: #58a6ff;
 }
 
 .dot-code {
-  background: linear-gradient(135deg, #ffb832, #ff8c00);
-  box-shadow: 0 0 6px rgba(255, 180, 50, 0.4);
+  background: #d29922;
 }
 
 .dot-user {
-  background: linear-gradient(135deg, #6ee77a, #3fb950);
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.4);
+  background: #3fb950;
 }
 
 .source-tag {
-  font-size: 9px;
+  font-size: 10px;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 3px;
   font-weight: 500;
   flex-shrink: 0;
 }
 
 .tag-builtin {
-  background: rgba(88, 166, 255, 0.12);
+  background: #1c3a5e;
   color: #58a6ff;
 }
 
 .tag-code {
-  background: rgba(255, 180, 50, 0.12);
-  color: #ffb832;
+  background: #3d2e00;
+  color: #d29922;
 }
 
 .tag-user {
-  background: rgba(63, 185, 80, 0.12);
-  color: #6ee77a;
+  background: #0f2d16;
+  color: #3fb950;
 }
 
 .agent-name {
-  font-size: 12px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #a0d2ff 0%, #c4b5fd 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 13px;
+  font-weight: 700;
+  color: #79b8ff;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-count {
   font-size: 10px;
-  color: rgba(167, 139, 250, 0.8);
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.2);
-  padding: 2px 7px;
+  color: #8b949e;
+  background: #21262d;
+  padding: 1px 6px;
   border-radius: 10px;
   font-weight: 500;
+  min-width: 18px;
+  text-align: center;
 }
 
 .agent-group-body {
-  padding-left: 6px;
+  padding: 4px 8px;
+  background: #0d1117;
 }
 
 .session-item {
   display: flex;
   align-items: center;
-  padding: 9px 12px;
-  margin: 2px 0;
-  border-radius: 8px;
+  padding: 7px 12px;
+  margin: 1px 0;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
+  font-size: 12px;
+  color: #7d8590;
+  transition: all 0.15s ease;
   position: relative;
-  background: rgba(255, 255, 255, 0.02);
+  background: transparent;
 }
 
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.08);
-  color: var(--lc-text-primary);
+  background: #21262d;
+  color: #c9d1d9;
 }
 
 .session-item.active {
-  background: rgba(56, 189, 248, 0.08);
-  border-color: rgba(56, 189, 248, 0.2);
-  color: var(--lc-text-primary);
-}
-
-.session-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  border-radius: 0 3px 3px 0;
-  background: linear-gradient(180deg, #38bdf8, #a78bfa);
+  background: #161b22;
+  color: #c9d1d9;
+  border-left: 2px solid #58a6ff;
+  padding-left: 10px;
 }
 
 .session-title {
@@ -423,15 +370,15 @@ function formatTime(iso: string): string {
   white-space: nowrap;
   flex: 1;
   margin-right: 8px;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 
 .session-time {
   font-size: 10px;
-  color: var(--lc-text-secondary);
+  color: #484f58;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .session-item:hover .session-time {
@@ -444,37 +391,34 @@ function formatTime(iso: string): string {
   align-items: center;
   gap: 8px;
   padding: 40px 16px;
-  opacity: 0.5;
+  color: #484f58;
 }
 
 .empty-icon {
-  font-size: 28px;
+  font-size: 24px;
 }
 
 .empty-text {
   font-size: 12px;
-  color: var(--lc-text-secondary);
 }
 
 .rename-input {
   width: 100%;
-  padding: 5px 10px;
+  padding: 4px 8px;
   font-size: 13px;
-  border: 1px solid rgba(88, 166, 255, 0.4);
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.4);
-  color: var(--lc-text-primary);
+  border: 1px solid #58a6ff;
+  border-radius: 4px;
+  background: #0d1117;
+  color: #e6edf3;
   outline: none;
-  box-shadow: 0 0 12px rgba(88, 166, 255, 0.1);
 }
 
 .rename-input:focus {
-  border-color: rgba(88, 166, 255, 0.6);
-  box-shadow: 0 0 16px rgba(88, 166, 255, 0.2);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.3);
 }
 
 .slide-enter-active, .slide-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
   overflow: hidden;
 }
 .slide-enter-from, .slide-leave-to {
@@ -498,13 +442,11 @@ function formatTime(iso: string): string {
 .context-menu {
   position: fixed;
   z-index: 9999;
-  background: rgba(18, 22, 30, 0.96);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
-  padding: 5px;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 4px;
   min-width: 140px;
 }
 
@@ -512,16 +454,16 @@ function formatTime(iso: string): string {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 12px;
   font-size: 13px;
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: pointer;
-  color: var(--lc-text-primary);
-  transition: background 0.15s ease;
+  color: #c9d1d9;
+  transition: background 0.12s ease;
 }
 
 .menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #30363d;
 }
 
 .menu-item-danger {
@@ -529,7 +471,7 @@ function formatTime(iso: string): string {
 }
 
 .menu-item-danger:hover {
-  background: rgba(248, 113, 113, 0.1);
+  background: #3d1f1f;
 }
 
 .menu-icon {
@@ -538,7 +480,7 @@ function formatTime(iso: string): string {
 
 .menu-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.06);
+  background: #30363d;
   margin: 3px 8px;
 }
 

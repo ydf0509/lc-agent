@@ -24,8 +24,9 @@
           </div>
         </el-option>
       </el-select>
-      <el-button size="small" @click="$emit('editAgent')" :disabled="agentsStore.isBuiltin">编辑</el-button>
-      <el-button size="small" type="primary" @click="$emit('newAgent')">+ 新Agent</el-button>
+      <button class="header-btn btn-edit" @click="$emit('editAgent')" :disabled="agentsStore.isBuiltin">编辑</button>
+      <button class="header-btn btn-new-agent" @click="$emit('newAgent')">+ 新Agent</button>
+      <button class="header-btn btn-new-chat" @click="$emit('newChat')">+ 新对话</button>
     </div>
     <div class="header-right">
       <span class="model-badge">{{ modelName }}</span>
@@ -48,6 +49,7 @@ defineProps<{
 defineEmits<{
   editAgent: []
   newAgent: []
+  newChat: []
 }>()
 </script>
 
@@ -146,5 +148,51 @@ defineEmits<{
   background: rgba(63, 185, 80, 0.15);
   color: #6ee77a;
   border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.header-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.header-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-edit {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+}
+
+.btn-edit:hover:not(:disabled) {
+  background: #30363d;
+  color: #e6edf3;
+}
+
+.btn-new-agent {
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #ffffff;
+}
+
+.btn-new-agent:hover {
+  background: linear-gradient(135deg, #2ea043, #3fb950);
+  box-shadow: 0 2px 8px rgba(46, 160, 67, 0.3);
+}
+
+.btn-new-chat {
+  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  color: #ffffff;
+}
+
+.btn-new-chat:hover {
+  background: linear-gradient(135deg, #388bfd, #58a6ff);
+  box-shadow: 0 2px 8px rgba(56, 139, 253, 0.3);
 }
 </style>
