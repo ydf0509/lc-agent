@@ -230,3 +230,4 @@ frontend/.vite/
 # Auto-generated type declarations
 frontend/auto-imports.d.ts
 frontend/components.d.ts
+tests_my/ai_tests/

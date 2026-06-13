@@ -66,7 +66,7 @@ class TestIntegration:
 
     def test_default_preset(self, lc_app):
         preset = lc_app.engine.get_default_preset()
-        assert preset.system_prompt == "You are a helpful assistant."
+        assert preset.system_prompt == "You are a helpful assistant. Respond in the user's language."
         assert preset.default_model == "test-model"
 
     def test_tool_filtering_none_allows_all(self, lc_app):

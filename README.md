@@ -142,11 +142,22 @@ npm run build    # 构建到 lc_agent/web/dist/
 
 | 层级 | 技术 |
 |------|------|
-| AI 引擎 | LangGraph `create_react_agent` |
+| AI 引擎 | LangChain `create_agent` + `init_chat_model` (多提供商) |
+| LLM 客户端 | `ChatOpenAIReasoning` — 自动提取 reasoning_content（兼容所有供应商） |
 | 后端 | FastAPI + SQLModel + asyncio |
 | 前端 | Vue 3 + TypeScript + Element Plus + Vite |
 | 数据库 | SQLite (aiosqlite) |
 | 通信 | WebSocket (流式) + REST API |
+
+## Reasoning / 思考过程显示
+
+框架使用自定义的 `ChatOpenAIReasoning` 类（继承 `ChatOpenAI`），自动从流式响应中提取 `reasoning_content` 字段，支持任何返回该字段的模型：
+
+- DeepSeek 系列（通过 DeepSeek 官方 / 字节方舟 / 阿里百炼等）
+- GLM 系列（复杂任务时自动触发思考）
+- 任何其他返回 `reasoning_content` 或 `reasoning` 的供应商
+
+无需为每个供应商 import 不同的 Chat Model 类。
 
 ## License
 

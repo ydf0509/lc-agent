@@ -19,13 +19,14 @@ from lc_agent.server.routes.skills import router as skills_router
 from lc_agent.server.routes.mcp import router as mcp_router
 
 
-def create_app(config: dict) -> FastAPI:
+def create_app(config: dict, lifespan=None) -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
         title="lc_agent",
         version=__version__,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

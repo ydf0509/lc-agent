@@ -66,6 +66,31 @@ export const useChatStore = defineStore('chat', () => {
 
     let streamStartTime = 0
     let currentRoundStart = 0
+    let inThinking = false
+
+    ws.value.on('thinking', (msg: WsMessage) => {
+      if (!isStreaming.value) {
+        isStreaming.value = true
+        streamStartTime = Date.now()
+        currentRoundStart = Date.now()
+        messages.value.push({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+          isStreaming: true,
+          usage: { rounds: [], toolCallCount: 0 },
+        })
+      }
+      const last = messages.value[messages.value.length - 1]
+      if (last && last.role === 'assistant') {
+        if (!inThinking) {
+          inThinking = true
+          last.content += '<!--THINK_START-->'
+        }
+        last.content += msg.content || ''
+      }
+    })
 
     ws.value.on('token', (msg: WsMessage) => {
       if (!isStreaming.value) {
@@ -83,6 +108,10 @@ export const useChatStore = defineStore('chat', () => {
       }
       const last = messages.value[messages.value.length - 1]
       if (last && last.role === 'assistant') {
+        if (inThinking) {
+          inThinking = false
+          last.content += '<!--THINK_END-->'
+        }
         last.content += msg.content || ''
       }
     })
@@ -105,7 +134,6 @@ export const useChatStore = defineStore('chat', () => {
 
 
     ws.value.on('tool_call', (msg: WsMessage) => {
-      // Ensure assistant message exists (DeepSeek may call tools before emitting tokens)
       if (!isStreaming.value) {
         isStreaming.value = true
         streamStartTime = Date.now()
@@ -121,6 +149,10 @@ export const useChatStore = defineStore('chat', () => {
       }
       const last = messages.value[messages.value.length - 1]
       if (last && last.role === 'assistant') {
+        if (inThinking) {
+          inThinking = false
+          last.content += '<!--THINK_END-->'
+        }
         if (!last.toolCalls) last.toolCalls = []
         const tcIdx = last.toolCalls.length
         const tc: ToolCall = {
@@ -219,8 +251,26 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  function sendMessage(content: string, presetId: string = '__chat__') {
-    if (!ws.value || !content.trim()) return
+  async function sendMessage(content: string, presetId: string = '__chat__') {
+    if (!content.trim()) return
+
+    const sessionsStore = useSessionsStore()
+    const sessionId = sessionsStore.currentSessionId
+    if (sessionId && sessionsStore.isLocalSession(sessionId)) {
+      const isFirstMessage = sessionsStore.currentSession?.message_count === 0
+      const realId = await sessionsStore.persistSession(sessionId)
+      // Always reconnect with the persisted session ID
+      ws.value?.disconnect()
+      await connect(realId)
+      // Immediately show user's message as title for new conversations
+      if (isFirstMessage) {
+        sessionsStore.updateTitleLocal(realId, content.trim().slice(0, 30))
+      }
+    } else if (!ws.value || !isConnected.value) {
+      if (sessionId) await connect(sessionId)
+    }
+
+    if (!ws.value) return
 
     messages.value.push({
       id: crypto.randomUUID(),

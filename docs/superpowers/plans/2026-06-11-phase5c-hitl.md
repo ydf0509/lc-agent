@@ -4,9 +4,9 @@
 
 **Goal:** When an agent calls a tool listed in `preset.dangerous_tools`, execution pauses via LangGraph `interrupt()` and the user must approve/reject via the frontend before the agent continues.
 
-**Architecture:** Use LangGraph's built-in `interrupt()` mechanism with `create_react_agent`'s `interrupt_before` parameter for dangerous tools. The WebSocket handler detects the interrupt state and sends it to the frontend. On user response, the handler resumes the graph with `Command(resume=...)`.
+**Architecture:** Use LangGraph's built-in `interrupt()` mechanism with `create_agent`'s `interrupt_before` parameter for dangerous tools. The WebSocket handler detects the interrupt state and sends it to the frontend. On user response, the handler resumes the graph with `Command(resume=...)`.
 
-**Tech Stack:** `langgraph.types.interrupt`, `langgraph.types.Command`, `create_react_agent(interrupt_before=...)`, WebSocket events
+**Tech Stack:** `langgraph.types.interrupt`, `langgraph.types.Command`, `create_agent(interrupt_before=...)`, WebSocket events
 
 ---
 
@@ -88,10 +88,10 @@ Expected: PASS (build_agent creates agent regardless)
 
 - [ ] **Step 3: Modify build_agent to pass interrupt_before**
 
-In `lc_agent/core/engine.py`, update the `build_agent` method. Replace the `create_react_agent` call:
+In `lc_agent/core/engine.py`, update the `build_agent` method. Replace the `create_agent` call:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 kwargs: dict[str, Any] = {}
 if self._checkpointer:
@@ -100,10 +100,10 @@ if self._checkpointer:
 if preset.dangerous_tools:
     kwargs["interrupt_before"] = ["tools"]
 
-agent = create_react_agent(
+agent = create_agent(
     model=llm,
     tools=tools,
-    state_modifier=system_prompt,
+    system_prompt=system_prompt,
     **kwargs,
 )
 ```

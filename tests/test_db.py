@@ -45,7 +45,7 @@ async def test_session_default_values():
         await session.commit()
         await session.refresh(sess)
         assert sess.title == "新对话"
-        assert sess.agent_id == "__default__"
+        assert sess.agent_id == "__chat__"
 
 
 @pytest.mark.asyncio

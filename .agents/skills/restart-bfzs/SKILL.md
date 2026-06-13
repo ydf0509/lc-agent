@@ -8,41 +8,39 @@ description: >-
 
 # Restart bfzs Server
 
-After significant code changes, rebuild the frontend and restart the bfzs server.
+Run the unified restart script to build frontend and start the server.
 
-## Steps
-
-### 1. Build frontend
-
-```bash
-npm run build
-# working_directory: D:\codes\lc-agent\frontend
-# Expected output: "✓ built in Xms"
-```
-
-### 2. Stop existing server
+## Quick Start
 
 ```powershell
-$pids = (Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique | Where-Object { $_ -ne 0 }
-if ($pids) { $pids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }
-Start-Sleep 2
+powershell -ExecutionPolicy Bypass -File "D:\codes\lc-agent\.agents\skills\restart-bfzs\scripts\restart.ps1"
+# working_directory: D:\codes\lc-agent
+# block_until_ms: 0 (background — server is long-running)
 ```
 
-### 3. Start bfzs server
+## Verify Startup
 
-```bash
-D:\ProgramData\miniconda3\envs\py312\python.exe -m bfzs.main --port 8001
-# working_directory: D:\codes\lc-agent-bfzs
-# Background this command (block_until_ms: 15000)
-```
+After backgrounding, poll the terminal output until you see:
+- `Uvicorn running on http://127.0.0.1:8001` — server ready
+- `[MCP] Connected:` — MCP integrations online
 
-### 4. Verify startup
+## Script Details
 
-Confirm output contains `Uvicorn running on http://127.0.0.1:8001`.
+The script (`scripts/restart.ps1`) performs three steps:
+1. **Build frontend** — `npm run build` in `D:\codes\lc-agent\frontend`
+2. **Stop existing server** — kills any process on port 8001
+3. **Start bfzs server** — runs `python -u -m bfzs.main --port 8001`
+
+### Parameters
+
+| Param   | Default     | Description        |
+|---------|-------------|--------------------|
+| -Port   | 8001        | Server listen port |
+| -Host_  | 127.0.0.1   | Server bind address|
 
 ## Notes
 
 - Python interpreter: `D:\ProgramData\miniconda3\envs\py312\python.exe`
 - Frontend build output: `D:\codes\lc-agent\lc_agent\web\dist\`
-- Default port: 8001 (configurable via `--port`)
-- If port is different, adjust the `LocalPort` value in step 2
+- Working directory for bfzs: `D:\codes\lc-agent-bfzs`
+- The script sets `PYTHONUNBUFFERED=1` for immediate log output

@@ -4,7 +4,7 @@
       <span class="usage-title">Token 用量</span>
       <div class="usage-badges">
         <span class="badge badge-rounds">🔄 {{ usage.rounds.length }} Rounds</span>
-        <span v-if="usage.toolCallCount" class="badge badge-tools">🔧 {{ usage.toolCallCount }} 工具</span>
+        <span v-if="usage.toolCallCount" class="badge badge-tools" @click.stop="toolsExpanded = !toolsExpanded">🔧 {{ usage.toolCallCount }} 工具</span>
         <span v-if="usage.totalDuration" class="badge badge-time">⏱ {{ formatDuration(usage.totalDuration) }}</span>
       </div>
     </div>
@@ -70,15 +70,46 @@
         </tbody>
       </table>
     </div>
+
+    <div v-if="toolsExpanded && toolCalls && toolCalls.length > 0" class="tools-details">
+      <div class="details-header">
+        <span class="detail-toggle" @click="toolsExpanded = false">▾ Tool Calls</span>
+        <span class="tools-badge">{{ toolCalls.length }} 工具</span>
+      </div>
+      <table class="details-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="th-name">名称</th>
+            <th>状态</th>
+            <th>耗时</th>
+            <th>返回长度</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(tc, i) in toolCalls" :key="i">
+            <td class="col-num">{{ i + 1 }}</td>
+            <td class="col-tool-name">{{ tc.name }}</td>
+            <td><span class="status-dot" :class="tc.status" />{{ statusLabel(tc.status) }}</td>
+            <td class="col-duration">{{ tc.duration ? formatDuration(tc.duration) : '-' }}</td>
+            <td>{{ tc.resultLength ? formatSize(tc.resultLength) : '-' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { MessageUsage } from '@/stores/chat'
+import type { MessageUsage, ToolCall } from '@/stores/chat'
 
-const props = defineProps<{ usage: MessageUsage | undefined }>()
+const props = defineProps<{
+  usage: MessageUsage | undefined
+  toolCalls?: ToolCall[]
+}>()
 const expanded = ref(false)
+const toolsExpanded = ref(false)
 
 const totalInput = computed(() =>
   props.usage?.rounds.reduce((s, r) => s + r.inputTokens, 0) || 0
@@ -104,6 +135,20 @@ function formatTokens(n: number): string {
 function formatDuration(ms: number): string {
   if (ms < 1000) return ms + 'ms'
   return (ms / 1000).toFixed(1) + 's'
+}
+
+function formatSize(len: number): string {
+  if (len < 1024) return `${len} chars`
+  return `${(len / 1024).toFixed(1)}K`
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'done': return '完成'
+    case 'running': return '执行中'
+    case 'error': return '错误'
+    default: return '等待'
+  }
 }
 </script>
 
@@ -290,5 +335,60 @@ function formatDuration(ms: number): string {
 
 .minimal-info {
   font-family: 'JetBrains Mono', monospace;
+}
+
+.badge-tools {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.badge-tools:hover {
+  background: rgba(163, 113, 247, 0.3);
+  transform: scale(1.05);
+}
+
+.tools-details {
+  margin-top: 12px;
+  border-top: 1px solid #21262d;
+  padding-top: 10px;
+}
+
+.tools-badge {
+  font-size: 10px;
+  color: #a371f7;
+  background: rgba(163, 113, 247, 0.1);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.col-tool-name {
+  text-align: left !important;
+  color: #58a6ff !important;
+  font-weight: 500;
+}
+
+.th-name {
+  text-align: left !important;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.status-dot.done {
+  background: #3fb950;
+}
+
+.status-dot.running {
+  background: #d29922;
+}
+
+.status-dot.error {
+  background: #f85149;
 }
 </style>

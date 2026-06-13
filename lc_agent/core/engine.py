@@ -8,7 +8,7 @@ from lc_agent.tools.registry import ToolRegistry
 
 
 class AgentEngine:
-    """Core agent engine wrapping LangChain create_agent with middleware support."""
+    """Core agent engine wrapping langchain.agents.create_agent with middleware support."""
 
     def __init__(self, config: dict, checkpointer=None):
         self.config = config
@@ -111,7 +111,7 @@ class AgentEngine:
         model_info = self._find_model(preset.default_model)
         llm = self._create_llm(model_info, preset.default_model)
 
-        from langgraph.prebuilt import create_react_agent
+        from langchain.agents import create_agent
 
         kwargs: dict[str, Any] = {}
         if self._checkpointer:
@@ -120,10 +120,10 @@ class AgentEngine:
         if preset.dangerous_tools:
             kwargs["interrupt_before"] = ["tools"]
 
-        agent = create_react_agent(
+        agent = create_agent(
             model=llm,
             tools=tools,
-            prompt=system_prompt,
+            system_prompt=system_prompt,
             **kwargs,
         )
 
@@ -131,18 +131,34 @@ class AgentEngine:
         return agent
 
     def _create_llm(self, model_info: ModelInfo | None, model_id: str):
-        """Create a ChatOpenAI instance from model info."""
-        from langchain_openai import ChatOpenAI
+        """Create a chat model instance.
 
-        if model_info:
-            return ChatOpenAI(
+        Uses ChatOpenAIReasoning when base_url is set — extracts reasoning_content
+        from any provider that returns it (DeepSeek, GLM, etc).
+        Uses init_chat_model for standard providers (handles provider routing).
+        """
+        if model_info and model_info.base_url:
+            from lc_agent.core.chat_model import ChatOpenAIReasoning
+            return ChatOpenAIReasoning(
                 model=model_info.id,
-                base_url=model_info.base_url or None,
+                base_url=model_info.base_url,
                 api_key=model_info.api_key or "not-set",
                 temperature=0.7,
                 stream_usage=True,
             )
-        return ChatOpenAI(model=model_id, api_key="not-set", stream_usage=True)
+
+        from langchain.chat_models import init_chat_model
+
+        if model_info:
+            model_str = f"{model_info.provider}:{model_info.id}" if model_info.provider else model_info.id
+            return init_chat_model(
+                model_str,
+                api_key=model_info.api_key or "not-set",
+                temperature=0.7,
+                stream_usage=True,
+            )
+
+        return init_chat_model(model_id, api_key="not-set", temperature=0.7, stream_usage=True)
 
     def _find_model(self, model_id: str) -> ModelInfo | None:
         """Find model info by ID."""

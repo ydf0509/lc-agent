@@ -17,6 +17,7 @@ async def test_send_event_token(handler):
     ws = AsyncMock()
     chunk = MagicMock()
     chunk.content = "Hello"
+    chunk.additional_kwargs = {}
 
     event = {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
     await handler._send_event(ws, event)
@@ -77,18 +78,92 @@ async def test_handle_message_passes_preset_id(handler):
     ws = AsyncMock()
 
     async def fake_stream(msg, tid, pid):
-        yield {"event": "on_chat_model_stream", "data": {"chunk": MagicMock(content="hi")}}
+        chunk = MagicMock()
+        chunk.content = "hi"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
 
     handler.engine.chat_stream = fake_stream
 
     data = {"type": "message", "content": "hello", "preset_id": "my_agent"}
     await handler.handle_message(ws, "thread-1", data)
 
-    # Should have sent at least a token event and a done event
     calls = ws.send_json.call_args_list
     types = [c[0][0]["type"] for c in calls]
     assert "token" in types
     assert "done" in types
+
+
+@pytest.mark.asyncio
+async def test_first_message_sends_title_update_immediately(handler):
+    """First message should send title_update with user content before streaming."""
+    ws = AsyncMock()
+
+    async def fake_stream(msg, tid, pid):
+        chunk = MagicMock()
+        chunk.content = "response"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+    handler.engine.chat_stream = fake_stream
+
+    data = {"type": "message", "content": "用户的第一条消息", "preset_id": "__chat__"}
+    await handler.handle_message(ws, "thread-new", data)
+
+    calls = ws.send_json.call_args_list
+    types = [c[0][0]["type"] for c in calls]
+
+    # title_update should be the FIRST message sent
+    assert types[0] == "title_update", f"First message should be title_update, got: {types}"
+    title_msg = calls[0][0][0]
+    assert title_msg["thread_id"] == "thread-new"
+    assert title_msg["title"] == "用户的第一条消息"
+
+
+@pytest.mark.asyncio
+async def test_second_message_does_not_send_title_update(handler):
+    """Second message should NOT send another title_update."""
+    ws = AsyncMock()
+
+    async def fake_stream(msg, tid, pid):
+        chunk = MagicMock()
+        chunk.content = "ok"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+    handler.engine.chat_stream = fake_stream
+
+    # First message
+    handler._message_counts["thread-existing"] = 1
+    data = {"type": "message", "content": "第二条消息"}
+    await handler.handle_message(ws, "thread-existing", data)
+
+    calls = ws.send_json.call_args_list
+    types = [c[0][0]["type"] for c in calls]
+    assert "title_update" not in types
+
+
+@pytest.mark.asyncio
+async def test_title_truncated_to_30_chars(handler):
+    """Long messages should be truncated to 30 chars for title."""
+    ws = AsyncMock()
+
+    async def fake_stream(msg, tid, pid):
+        chunk = MagicMock()
+        chunk.content = "x"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+    handler.engine.chat_stream = fake_stream
+
+    long_msg = "这是一条非常非常长的消息用来测试标题截断功能是否正确工作不超过30字"
+    data = {"type": "message", "content": long_msg}
+    await handler.handle_message(ws, "thread-long", data)
+
+    calls = ws.send_json.call_args_list
+    title_msg = calls[0][0][0]
+    assert title_msg["type"] == "title_update"
+    assert len(title_msg["title"]) <= 30
 
 
 @pytest.mark.asyncio

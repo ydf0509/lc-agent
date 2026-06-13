@@ -33,7 +33,7 @@ async def test_list_agents_returns_default(app):
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) >= 1
-        assert any(a["id"] == "__default__" for a in data)
+        assert any(a["id"] == "__chat__" for a in data)
 
 
 @pytest.mark.asyncio
@@ -98,5 +98,5 @@ async def test_delete_agent(app):
 async def test_cannot_delete_default(app):
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.delete("/api/agents/__default__")
+        resp = await client.delete("/api/agents/__chat__")
         assert resp.status_code == 400

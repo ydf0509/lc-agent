@@ -68,6 +68,93 @@ class TestAgentEngine:
         from lc_agent.core.engine import AgentEngine
         engine = AgentEngine(sample_config)
         preset = engine.get_default_preset()
-        assert preset.id == "__default__"
-        assert preset.system_prompt == "You are a helpful assistant."
+        assert preset.id == "__chat__"
+        assert preset.system_prompt == "You are a helpful assistant. Respond in the user's language."
         assert preset.default_model == "test-model"
+
+
+class TestCreateLlm:
+    """Test _create_llm method with ChatOpenAIReasoning and init_chat_model."""
+
+    def test_base_url_uses_chat_openai_reasoning(self, sample_config):
+        """All models with base_url should use ChatOpenAIReasoning for reasoning extraction."""
+        from lc_agent.core.engine import AgentEngine
+        from lc_agent.core.models import ModelInfo
+        from lc_agent.core.chat_model import ChatOpenAIReasoning
+
+        engine = AgentEngine(sample_config)
+        for model_id in ["ds-deepseek-v4-flash", "ark-deepseek-v4-flash", "ark-glm-5.1", "gpt-4o"]:
+            model_info = ModelInfo(
+                id=model_id,
+                provider="litellm",
+                base_url="http://localhost:4000/v1",
+                api_key="sk-no-key",
+            )
+            llm = engine._create_llm(model_info, model_id)
+            assert isinstance(llm, ChatOpenAIReasoning), f"{model_id} should use ChatOpenAIReasoning"
+            assert llm.model_name == model_id
+
+    def test_chat_openai_reasoning_is_subclass_of_chatopenai(self, sample_config):
+        """ChatOpenAIReasoning should be a drop-in replacement for ChatOpenAI."""
+        from lc_agent.core.chat_model import ChatOpenAIReasoning
+        from langchain_openai import ChatOpenAI
+        assert issubclass(ChatOpenAIReasoning, ChatOpenAI)
+
+    def test_creates_llm_without_base_url_uses_init_chat_model(self, sample_config):
+        """When no base_url, should use init_chat_model for provider routing."""
+        from lc_agent.core.engine import AgentEngine
+        from lc_agent.core.models import ModelInfo
+        from langchain_openai import ChatOpenAI
+
+        engine = AgentEngine(sample_config)
+        model_info = ModelInfo(
+            id="deepseek-chat",
+            provider="deepseek",
+            base_url="",
+            api_key="test-key",
+        )
+        llm = engine._create_llm(model_info, "deepseek-chat")
+        assert llm is not None
+        assert hasattr(llm, 'ainvoke')
+        # Should NOT be ChatOpenAI when using standard provider routing
+        from langchain_deepseek import ChatDeepSeek
+        assert isinstance(llm, ChatDeepSeek)
+
+    def test_creates_llm_fallback_when_no_model_info(self, sample_config):
+        """When model_info is None, should use init_chat_model with bare model_id."""
+        from lc_agent.core.engine import AgentEngine
+
+        engine = AgentEngine(sample_config)
+        llm = engine._create_llm(None, "gpt-4o")
+        assert llm is not None
+        assert hasattr(llm, 'ainvoke')
+
+    def test_creates_llm_passes_temperature(self, sample_config):
+        """LLM should be configured with temperature=0.7."""
+        from lc_agent.core.engine import AgentEngine
+        from lc_agent.core.models import ModelInfo
+
+        engine = AgentEngine(sample_config)
+        model_info = ModelInfo(
+            id="gpt-4o",
+            provider="openai",
+            base_url="https://api.openai.com/v1",
+            api_key="test-key",
+        )
+        llm = engine._create_llm(model_info, "gpt-4o")
+        assert llm.temperature == 0.7
+
+    def test_creates_llm_enables_stream_usage(self, sample_config):
+        """LLM should have stream_usage=True for token tracking."""
+        from lc_agent.core.engine import AgentEngine
+        from lc_agent.core.models import ModelInfo
+
+        engine = AgentEngine(sample_config)
+        model_info = ModelInfo(
+            id="gpt-4o",
+            provider="openai",
+            base_url="https://api.openai.com/v1",
+            api_key="test-key",
+        )
+        llm = engine._create_llm(model_info, "gpt-4o")
+        assert llm.stream_usage is True

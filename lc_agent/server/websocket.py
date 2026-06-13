@@ -46,6 +46,17 @@ class ChatWebSocketHandler:
             self._cancel_flags[thread_id] = False
             usage_rounds: list[dict] = []
             round_start_time = time.time()
+
+            is_first = self._message_counts.get(thread_id, 0) == 0
+            if is_first:
+                preliminary_title = content[:30].strip()
+                await websocket.send_json({
+                    "type": "title_update",
+                    "thread_id": thread_id,
+                    "title": preliminary_title,
+                })
+                asyncio.create_task(self._save_title(thread_id, preliminary_title))
+
             try:
                 async for event in self.engine.chat_stream(content, thread_id, preset_id):
                     if self._cancel_flags.get(thread_id):
@@ -98,6 +109,20 @@ class ChatWebSocketHandler:
                 await websocket.send_json({"type": "done"})
             except Exception as e:
                 await websocket.send_json({"type": "error", "message": str(e)})
+
+    async def _save_title(self, thread_id: str, title: str):
+        """Save title to DB without pushing to client."""
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import SessionRepository
+            session = get_async_session()
+            try:
+                repo = SessionRepository(session)
+                await repo.update(thread_id, title=title)
+            finally:
+                await session.close()
+        except Exception:
+            pass
 
     async def _generate_and_push_title(self, websocket: WebSocket, thread_id: str, first_message: str, preset_id: str = "__chat__"):
         """Generate title from first message using the agent's model, save to DB, and push to client."""
@@ -187,8 +212,13 @@ class ChatWebSocketHandler:
 
         if kind == "on_chat_model_stream":
             chunk = event.get("data", {}).get("chunk")
-            if chunk and hasattr(chunk, "content") and chunk.content:
-                await websocket.send_json({"type": "token", "content": chunk.content})
+            if chunk:
+                additional = getattr(chunk, "additional_kwargs", None) or {}
+                reasoning = additional.get("reasoning_content") or additional.get("reasoning")
+                if reasoning:
+                    await websocket.send_json({"type": "thinking", "content": reasoning})
+                if hasattr(chunk, "content") and chunk.content:
+                    await websocket.send_json({"type": "token", "content": chunk.content})
 
         elif kind == "on_tool_start":
             tool_input = event.get("data", {}).get("input", {})

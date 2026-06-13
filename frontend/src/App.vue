@@ -47,6 +47,7 @@ const agentsStore = useAgentsStore()
 const sessionsStore = useSessionsStore()
 const agentEditorRef = ref<InstanceType<typeof AgentEditorDialog>>()
 const sidebarCollapsed = ref(false)
+let skipAgentWatch = false
 
 onMounted(async () => {
   await Promise.all([
@@ -77,6 +78,7 @@ async function restoreSession(sessionId: string) {
   if (session) {
     sessionsStore.selectSession(sessionId)
     if (session.agent_id) {
+      skipAgentWatch = true
       agentsStore.selectAgent(session.agent_id)
     }
     chatStore.clearMessages()
@@ -86,11 +88,10 @@ async function restoreSession(sessionId: string) {
   }
 }
 
-async function handleNewChat() {
-  const session = await sessionsStore.createSession(agentsStore.currentAgentId)
+function handleNewChat() {
+  const session = sessionsStore.createLocalSession(agentsStore.currentAgentId)
   chatStore.clearMessages()
   chatStore.disconnect()
-  chatStore.connect(session.id)
   router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: agentsStore.currentAgentId } })
 }
 
@@ -103,14 +104,22 @@ async function handleSwitchSession(sessionId: string) {
   chatStore.connect(sessionId)
   const agentId = session?.agent_id || agentsStore.currentAgentId
   if (session?.agent_id) {
+    skipAgentWatch = true
     agentsStore.selectAgent(session.agent_id)
   }
   router.push({ name: 'chat', params: { sessionId }, query: { agent: agentId } })
 }
 
 watch(() => agentsStore.currentAgentId, (newAgentId) => {
+  if (skipAgentWatch) {
+    skipAgentWatch = false
+    return
+  }
   if (route.name === 'home' || route.name === 'chat') {
-    router.replace({ ...route, query: { ...route.query, agent: newAgentId } })
+    const session = sessionsStore.createLocalSession(newAgentId)
+    chatStore.clearMessages()
+    chatStore.disconnect()
+    router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: newAgentId } })
   }
 })
 

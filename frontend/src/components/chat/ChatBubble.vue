@@ -32,7 +32,7 @@
 
         <span v-if="message.isStreaming" class="streaming-cursor">▊</span>
 
-        <TokenUsagePanel v-if="message.role === 'assistant' && !message.isStreaming && message.usage" :usage="message.usage" />
+        <TokenUsagePanel v-if="message.role === 'assistant' && !message.isStreaming && message.usage" :usage="message.usage" :tool-calls="message.toolCalls" />
       </div>
     </div>
   </div>
@@ -65,34 +65,53 @@ const renderedSegments = computed((): RenderedSegment[] => {
   if (!content) return []
 
   const toolCalls = props.message.toolCalls || []
-  const toolMarkerRe = /<!--TOOL:(\d+)-->/g
+  const markerRe = /<!--(?:TOOL:(\d+)|THINK_START|THINK_END)-->/g
   const parts: RenderedSegment[] = []
   let lastIndex = 0
   let match: RegExpExecArray | null
   let lastToolSegIdx = -1
+  let inThinking = false
 
-  while ((match = toolMarkerRe.exec(content)) !== null) {
+  while ((match = markerRe.exec(content)) !== null) {
     const textBefore = content.slice(lastIndex, match.index).trim()
-    if (textBefore) {
-      parts.push({ type: 'text', html: renderMarkdown(textBefore), cls: 'thinking-block' })
-    }
-    const tcIdx = parseInt(match[1], 10)
-    if (toolCalls[tcIdx]) {
-      lastToolSegIdx = parts.length
-      parts.push({ type: 'tool', toolCall: toolCalls[tcIdx] })
+    const marker = match[0]
+
+    if (marker === '<!--THINK_START-->') {
+      if (textBefore) {
+        parts.push({ type: 'text', html: renderMarkdown(textBefore), cls: 'content-block' })
+      }
+      inThinking = true
+    } else if (marker === '<!--THINK_END-->') {
+      if (textBefore) {
+        parts.push({ type: 'text', html: renderMarkdown(textBefore), cls: 'thinking-block' })
+      }
+      inThinking = false
+    } else {
+      // TOOL marker
+      if (textBefore) {
+        parts.push({ type: 'text', html: renderMarkdown(textBefore), cls: inThinking ? 'thinking-block' : 'content-block' })
+      }
+      const tcIdx = parseInt(match[1], 10)
+      if (toolCalls[tcIdx]) {
+        lastToolSegIdx = parts.length
+        parts.push({ type: 'tool', toolCall: toolCalls[tcIdx] })
+      }
     }
     lastIndex = match.index + match[0].length
   }
 
   const remaining = content.slice(lastIndex).trim()
   if (remaining) {
-    parts.push({ type: 'text', html: renderMarkdown(remaining), cls: 'content-block' })
+    parts.push({ type: 'text', html: renderMarkdown(remaining), cls: inThinking ? 'thinking-block' : 'content-block' })
   }
 
-  // Re-classify: text before the last tool = thinking, after = content
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].type === 'text') {
-      parts[i].cls = (lastToolSegIdx >= 0 && i < lastToolSegIdx) ? 'thinking-block' : 'content-block'
+  // If no explicit THINK markers, fall back to old heuristic: text before last tool = thinking
+  const hasThinkMarkers = content.includes('<!--THINK_START-->')
+  if (!hasThinkMarkers && lastToolSegIdx >= 0) {
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].type === 'text') {
+        parts[i].cls = i < lastToolSegIdx ? 'thinking-block' : 'content-block'
+      }
     }
   }
 

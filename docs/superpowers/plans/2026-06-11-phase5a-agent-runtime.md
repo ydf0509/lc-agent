@@ -4,9 +4,9 @@
 
 **Goal:** Make `AgentEngine.build_agent()` produce a working LangGraph agent that streams real LLM responses and tool calls through WebSocket to the frontend.
 
-**Architecture:** Refactor `build_agent()` to use `create_react_agent` with properly initialized `ChatOpenAI` (supporting configurable `base_url`). Refactor `chat_stream()` to correctly parse `astream_events` v2. Add robust error handling for LLM failures.
+**Architecture:** Refactor `build_agent()` to use `create_agent` with properly initialized `ChatOpenAI` (supporting configurable `base_url`). Refactor `chat_stream()` to correctly parse `astream_events` v2. Add robust error handling for LLM failures.
 
-**Tech Stack:** `langchain-openai`, `langgraph.prebuilt.create_react_agent`, `astream_events(version="v2")`, `ChatOpenAI`
+**Tech Stack:** `langchain-openai`, `langchain.agents.create_agent`, `astream_events(version="v2")`, `ChatOpenAI`
 
 ---
 
@@ -100,16 +100,16 @@ def build_agent(self, preset: AgentPreset | None = None):
     model_info = self._find_model(preset.default_model)
     llm = self._create_llm(model_info, preset.default_model)
 
-    from langgraph.prebuilt import create_react_agent
+    from langchain.agents import create_agent
 
     kwargs: dict[str, Any] = {}
     if self._checkpointer:
         kwargs["checkpointer"] = self._checkpointer
 
-    agent = create_react_agent(
+    agent = create_agent(
         model=llm,
         tools=tools,
-        state_modifier=system_prompt,
+        system_prompt=system_prompt,
         **kwargs,
     )
 
@@ -139,7 +139,7 @@ Expected: PASS
 
 ```bash
 git add lc_agent/core/engine.py tests/test_runtime.py
-git commit -m "feat: refactor build_agent to use create_react_agent with proper LLM init"
+git commit -m "feat: refactor build_agent to use create_agent with proper LLM init"
 ```
 
 ---

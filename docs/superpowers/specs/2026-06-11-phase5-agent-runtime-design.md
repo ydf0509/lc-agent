@@ -33,12 +33,12 @@ User → WebSocket → ChatWebSocketHandler
 ### Key Changes
 
 1. **LLM Initialization** (`lc_agent/core/engine.py`)
-   - Parse `provider` config → instantiate `ChatOpenAI` with `base_url`, `api_key`, `model`
-   - Support provider types: `openai`, `deepseek`, `ollama` (all via `langchain_openai.ChatOpenAI`)
-   - `temperature`, `max_tokens` from model config
+   - Parse `provider` config → use `init_chat_model` for standard providers or `ChatOpenAI` for custom base_url
+   - Support provider types: `openai`, `deepseek`, `anthropic`, `ollama` (via `langchain.chat_models.init_chat_model`)
+   - `temperature`, `stream_usage` from model config
 
 2. **Agent Construction** (`lc_agent/core/engine.py`)
-   - Use `langgraph.prebuilt.create_react_agent(model, tools, checkpointer, state_modifier=system_prompt)`
+   - Use `langchain.agents.create_agent(model, tools, checkpointer=checkpointer, system_prompt=system_prompt)`
    - Tools come from `ToolRegistry.get_tools(preset.allowed_tools)`
    - Checkpointer from `self._checkpointer` (AsyncSqliteSaver)
 
@@ -193,12 +193,12 @@ def approval_node(state):
 
 ```python
 from lc_agent import LcAgentApp
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 app = LcAgentApp(config_path="config.jsonc")
 
 # Register custom agent
-my_graph = create_react_agent(my_model, my_tools)
+my_graph = create_agent(my_model, my_tools)
 app.add_agent("my_custom_agent", my_graph, description="My custom agent")
 
 app.run()

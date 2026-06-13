@@ -17,7 +17,7 @@ Derived from the user's prior `nb_agent` framework (TUI-based), adapting its pro
 - **JSONC Configuration** — comment-friendly config with `{env:VAR}` substitution
 - **Human-in-the-Loop** — dangerous tool gating via interrupt mechanism
 
-Key difference: replaces nb_agent's custom ReAct loop with LangGraph's `create_react_agent`, and the TUI with a Vue 3 Web UI.
+Key difference: replaces nb_agent's custom ReAct loop with `langchain.agents.create_agent`, and the TUI with a Vue 3 Web UI.
 
 ## Architecture
 
@@ -43,7 +43,7 @@ Key difference: replaces nb_agent's custom ReAct loop with LangGraph's `create_r
                 │
 ┌───────────────▼──────────────────────────────────────┐
 │   LangGraph / LangChain                              │
-│   create_react_agent + InMemorySaver + stream_events │
+│   create_agent + init_chat_model + stream_events     │
 └──────────────────────────────────────────────────────┘
 ```
 

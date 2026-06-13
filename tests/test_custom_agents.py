@@ -86,7 +86,9 @@ async def test_websocket_uses_custom_agent(app_instance):
     mock_graph = MagicMock()
 
     async def fake_stream(*args, **kwargs):
-        yield {"event": "on_chat_model_stream", "data": {"chunk": MagicMock(content="custom response")}}
+        chunk = MagicMock(content="custom response")
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
 
     mock_graph.astream_events = fake_stream
     app_instance.add_agent("ws_agent", mock_graph, description="WS test")

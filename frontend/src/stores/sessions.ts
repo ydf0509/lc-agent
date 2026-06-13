@@ -16,10 +16,15 @@ export interface Session {
 export const useSessionsStore = defineStore('sessions', () => {
   const sessions = ref<Session[]>([])
   const currentSessionId = ref<string | null>(null)
+  const localSessionIds = ref<Set<string>>(new Set())
 
   const currentSession = computed(() =>
     sessions.value.find(s => s.id === currentSessionId.value)
   )
+
+  function isLocalSession(id: string): boolean {
+    return localSessionIds.value.has(id)
+  }
 
   async function init() {
     try {
@@ -27,6 +32,52 @@ export const useSessionsStore = defineStore('sessions', () => {
     } catch (e) {
       console.error('[SessionsStore] Failed to fetch:', e)
     }
+  }
+
+  function createLocalSession(agentId: string = '__chat__', model: string = ''): Session {
+    const existing = sessions.value.find(
+      s => s.agent_id === agentId && s.message_count === 0 && localSessionIds.value.has(s.id)
+    )
+    if (existing) {
+      currentSessionId.value = existing.id
+      return existing
+    }
+
+    const id = crypto.randomUUID()
+    const session: Session = {
+      id,
+      title: '新对话',
+      agent_id: agentId,
+      model,
+      message_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    sessions.value.unshift(session)
+    localSessionIds.value.add(id)
+    currentSessionId.value = id
+    return session
+  }
+
+  async function persistSession(id: string): Promise<string> {
+    if (!localSessionIds.value.has(id)) return id
+    const session = sessions.value.find(s => s.id === id)
+    if (!session) return id
+
+    const created = await api.createSession({
+      agent_id: session.agent_id,
+      model: session.model,
+    })
+    localSessionIds.value.delete(id)
+    const newId = created.id || id
+    const idx = sessions.value.findIndex(s => s.id === id)
+    if (idx >= 0) {
+      sessions.value[idx] = { ...sessions.value[idx], ...created, id: newId }
+    }
+    if (currentSessionId.value === id) {
+      currentSessionId.value = newId
+    }
+    return newId
   }
 
   async function createSession(agentId: string = '__chat__', model: string = '') {
@@ -89,5 +140,5 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = id
   }
 
-  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, deleteSession, updateTitle, updateTitleLocal, selectSession }
+  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, selectSession }
 })

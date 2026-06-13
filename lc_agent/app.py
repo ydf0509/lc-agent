@@ -1,8 +1,10 @@
 # lc_agent/app.py
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import uvicorn
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from lc_agent.core.engine import AgentEngine
 from lc_agent.db.engine import init_db
@@ -27,7 +29,7 @@ class LcAgentApp:
         from lc_agent.mcp.manager import McpManager
         mcp_config = config.get("mcp_servers", {})
         self.mcp_manager = McpManager(mcp_config)
-        self.fastapi_app = create_app(config)
+        self.fastapi_app = create_app(config, lifespan=self._lifespan)
         self.fastapi_app.state.mcp_manager = self.mcp_manager
         self.fastapi_app.state.skill_scanner = self.skill_scanner
         self.engine._skill_scanner = self.skill_scanner
@@ -37,34 +39,36 @@ class LcAgentApp:
         self._setup_websocket_route()
         mount_static_files(self.fastapi_app)
 
-        @self.fastapi_app.on_event("startup")
-        async def startup():
-            await init_db(self._db_url)
+    @asynccontextmanager
+    async def _lifespan(self, app: FastAPI):
+        """FastAPI lifespan: startup and shutdown logic."""
+        import asyncio
+
+        await init_db(self._db_url)
+        try:
+            from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+            import aiosqlite
+            conn = await aiosqlite.connect(self._checkpoint_path)
+            saver = AsyncSqliteSaver(conn)
+            await saver.setup()
+            self.engine._checkpointer = saver
+        except Exception as e:
+            print(f"[Warning] Checkpoint saver setup failed, using None: {e}")
+
+        await self._load_presets_from_db()
+
+        async def _connect_mcp_background():
             try:
-                from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-                import aiosqlite
-                conn = await aiosqlite.connect(self._checkpoint_path)
-                saver = AsyncSqliteSaver(conn)
-                await saver.setup()
-                self.engine._checkpointer = saver
+                await self.mcp_manager.connect_all()
+                connected = [s for s in self.mcp_manager.servers if s.status == "connected"]
+                if connected:
+                    print(f"[MCP] Connected: {[s.name for s in connected]}")
+                    self.engine._mcp_generation += 1
             except Exception as e:
-                print(f"[Warning] Checkpoint saver setup failed, using None: {e}")
+                print(f"[MCP] Background connection error: {e}")
 
-            await self._load_presets_from_db()
-
-            import asyncio
-
-            async def _connect_mcp_background():
-                try:
-                    await self.mcp_manager.connect_all()
-                    connected = [s for s in self.mcp_manager.servers if s.status == "connected"]
-                    if connected:
-                        print(f"[MCP] Connected: {[s.name for s in connected]}")
-                        self.engine._mcp_generation += 1
-                except Exception as e:
-                    print(f"[MCP] Background connection error: {e}")
-
-            asyncio.create_task(_connect_mcp_background())
+        asyncio.create_task(_connect_mcp_background())
+        yield
 
     def _setup_websocket_route(self):
         import asyncio
@@ -165,6 +169,7 @@ class LcAgentApp:
         from lc_agent.core.models import AgentPreset
 
         self.engine._agents[name] = graph
+        self.engine._agent_mcp_gen[name] = self.engine._mcp_generation
         preset = AgentPreset(
             id=name,
             name=name,

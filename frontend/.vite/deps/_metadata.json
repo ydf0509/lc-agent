@@ -2,7 +2,7 @@
   "hash": "68fc56e8",
   "configHash": "1698dacf",
   "lockfileHash": "bba81677",
-  "browserHash": "2bb6b8db",
+  "browserHash": "db0ff56f",
   "optimized": {
     "element-plus": {
       "src": "../../node_modules/element-plus/es/index.mjs",
@@ -14,6 +14,12 @@
       "src": "../../node_modules/pinia/dist/pinia.mjs",
       "file": "pinia.js",
       "fileHash": "1427e6e6",
+      "needsInterop": false
+    },
+    "vue-router": {
+      "src": "../../node_modules/vue-router/dist/vue-router.mjs",
+      "file": "vue-router.js",
+      "fileHash": "2e85b0e8",
       "needsInterop": false
     },
     "vue": {
