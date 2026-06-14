@@ -36,6 +36,13 @@ def toggle_mcp_server(name: str, request: Request):
     server.enabled = not server.enabled
     if not server.enabled:
         server.status = "disabled"
-    elif server.status == "disabled":
-        server.status = "disconnected"
+    else:
+        has_session = name in manager._sessions
+        if has_session:
+            server.status = "connected"
+        else:
+            server.status = "disconnected"
+    engine = getattr(request.app.state, "engine", None)
+    if engine:
+        engine._mcp_generation += 1
     return {"name": name, "enabled": server.enabled, "status": server.status}

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 
-from lc_agent.server.dependencies import get_registry
+from lc_agent.core.engine import AgentEngine
+from lc_agent.server.dependencies import get_engine, get_registry
 from lc_agent.tools.registry import ToolRegistry
 
 router = APIRouter(tags=["tools"])
@@ -46,7 +47,11 @@ def list_tool_groups(registry: ToolRegistry = Depends(get_registry)):
 
 
 @router.post("/tools/groups/{group_id}/toggle")
-def toggle_tool_group(group_id: str, registry: ToolRegistry = Depends(get_registry)):
+def toggle_tool_group(
+    group_id: str,
+    registry: ToolRegistry = Depends(get_registry),
+    engine: AgentEngine = Depends(get_engine),
+):
     """Toggle a tool group's enabled state."""
     if group_id in registry._disabled_groups:
         registry._disabled_groups.discard(group_id)
@@ -54,4 +59,5 @@ def toggle_tool_group(group_id: str, registry: ToolRegistry = Depends(get_regist
     else:
         registry._disabled_groups.add(group_id)
         enabled = False
+    engine._mcp_generation += 1
     return {"id": group_id, "enabled": enabled}

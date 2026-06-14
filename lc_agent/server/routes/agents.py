@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -194,3 +194,56 @@ async def delete_agent(agent_id: str, engine: AgentEngine = Depends(get_engine),
     engine._agents.pop(agent_id, None)
 
     return Response(status_code=204)
+
+
+@router.post("/agents/{agent_id}/activate")
+def activate_agent(agent_id: str, request: Request, engine: AgentEngine = Depends(get_engine)):
+    """Apply an agent's default toggle state to MCP servers and tool groups.
+
+    - Agents with default_enabled=False (Empty): disable all MCP + tool groups
+    - Agents with default_enabled=True (Power): enable all MCP + tool groups
+    - Chat agent (allowed=[]): no change needed (preset blocks everything)
+    """
+    from lc_agent.tools.registry import ToolRegistry
+
+    preset = engine._resolve_preset(agent_id)
+    manager = getattr(request.app.state, "mcp_manager", None)
+    registry = ToolRegistry()
+
+    if preset.allowed_tool_groups == [] and preset.allowed_mcp_servers == []:
+        return {"agent_id": agent_id, "action": "none", "reason": "preset blocks all"}
+
+    target_enabled = preset.default_enabled
+
+    changed_mcp = []
+    if manager:
+        for server in manager.servers:
+            if server.enabled != target_enabled:
+                server.enabled = target_enabled
+                if not target_enabled:
+                    server.status = "disabled"
+                elif server.name in manager._sessions:
+                    server.status = "connected"
+                else:
+                    server.status = "disconnected"
+                changed_mcp.append(server.name)
+
+    changed_groups = []
+    for group in registry.get_group_names():
+        is_disabled = group in registry._disabled_groups
+        if target_enabled and is_disabled:
+            registry._disabled_groups.discard(group)
+            changed_groups.append(group)
+        elif not target_enabled and not is_disabled:
+            registry._disabled_groups.add(group)
+            changed_groups.append(group)
+
+    if changed_mcp or changed_groups:
+        engine._mcp_generation += 1
+
+    return {
+        "agent_id": agent_id,
+        "default_enabled": target_enabled,
+        "changed_mcp": changed_mcp,
+        "changed_groups": changed_groups,
+    }

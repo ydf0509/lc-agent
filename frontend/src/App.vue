@@ -77,7 +77,7 @@ async function restoreSession(sessionId: string) {
   const session = sessionsStore.sessions.find(s => s.id === sessionId)
   if (session) {
     sessionsStore.selectSession(sessionId)
-    if (session.agent_id) {
+    if (session.agent_id && session.agent_id !== agentsStore.currentAgentId) {
       skipAgentWatch = true
       agentsStore.selectAgent(session.agent_id)
     }
@@ -103,7 +103,7 @@ async function handleSwitchSession(sessionId: string) {
   await chatStore.loadMessages(sessionId)
   chatStore.connect(sessionId)
   const agentId = session?.agent_id || agentsStore.currentAgentId
-  if (session?.agent_id) {
+  if (session?.agent_id && session.agent_id !== agentsStore.currentAgentId) {
     skipAgentWatch = true
     agentsStore.selectAgent(session.agent_id)
   }

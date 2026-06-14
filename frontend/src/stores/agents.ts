@@ -57,8 +57,13 @@ export const useAgentsStore = defineStore('agents', () => {
     if (currentAgentId.value === id) currentAgentId.value = '__chat__'
   }
 
-  function selectAgent(id: string) {
+  async function selectAgent(id: string) {
     currentAgentId.value = id
+    try {
+      await api.activateAgent(id)
+    } catch {
+      // Non-critical: agent may still work without explicit activation
+    }
   }
 
   function getAgentName(agentId: string): string {

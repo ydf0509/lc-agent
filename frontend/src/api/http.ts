@@ -30,6 +30,7 @@ export const api = {
   createAgent: (data: object) => fetchApi<any>('/agents', { method: 'POST', body: JSON.stringify(data) }),
   updateAgent: (id: string, data: object) => fetchApi<any>(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAgent: (id: string) => fetchApi<void>(`/agents/${id}`, { method: 'DELETE' }),
+  activateAgent: (id: string) => fetchApi<any>(`/agents/${id}/activate`, { method: 'POST' }),
 
   getSessions: () => fetchApi<any[]>('/sessions'),
   createSession: (data: { title?: string; agent_id?: string; model?: string }) =>
