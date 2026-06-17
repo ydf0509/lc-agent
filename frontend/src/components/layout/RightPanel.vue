@@ -100,7 +100,7 @@ const agentsStore = useAgentsStore()
 
 <style scoped>
 .right-panel {
-  width: 300px;
+  width: 450px;
   background: var(--el-bg-color);
   border-left: 1px solid var(--el-border-color);
   padding: 16px;

@@ -228,14 +228,11 @@ onMounted(() => {
 }
 
 .messages-container :deep(.markdown-body) {
-  line-height: 1.7;
-  font-size: 14px;
-  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
-.messages-container :deep(.markdown-body pre) {
-  border-radius: 8px;
-  overflow-x: auto;
+.messages-container :deep(.markdown-body pre.hljs) {
+  background: var(--el-fill-color-darker, var(--el-bg-color));
 }
 
 .messages-container :deep(.elx-welcome) {

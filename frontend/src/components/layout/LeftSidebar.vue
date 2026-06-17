@@ -154,7 +154,7 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
 
 <style scoped>
 .left-sidebar {
-  width: 260px;
+  width: 312px;
   background: var(--el-bg-color);
   border-right: 1px solid var(--el-border-color);
   display: flex;
@@ -164,7 +164,7 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
 }
 
 .left-sidebar.collapsed {
-  width: 56px;
+  width: 68px;
 }
 
 .sidebar-header {
