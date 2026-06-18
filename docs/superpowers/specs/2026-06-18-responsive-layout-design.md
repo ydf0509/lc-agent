@@ -1,171 +1,170 @@
-# Responsive Web Layout for Desktop and Mobile
+# 电脑端和手机端响应式网页布局设计
 
-**Date:** 2026-06-18
-**Status:** Approved
-**Scope:** Make the lc-agent Vue frontend usable on desktop and phone-sized web viewports without replacing Element Plus or Vue Element Plus X.
+**日期：** 2026-06-18
+**状态：** 已确认
+**范围：** 在不替换 Element Plus 和 Vue Element Plus X 的前提下，让 lc-agent 前端同时适配电脑网页和手机网页。
 
-## Goal
+## 目标
 
-Keep the existing desktop chat workspace while adding a mobile-first single-column experience. On phones, the chat should be the primary screen, with the session list and tools/status panel available through lightweight drawers.
+保留现有电脑端聊天工作台，同时新增手机端单栏体验。手机上默认以聊天区为主，会话列表和工具/状态面板通过轻量抽屉打开。
 
-## Current Problem
+## 当前问题
 
-The current application shell is desktop-only:
+当前应用外壳是桌面优先布局：
 
-- `App.vue` keeps `.app-body` as a horizontal flex row at every viewport width.
-- `LeftSidebar.vue` uses a fixed `312px` width, or `68px` when collapsed.
-- `RightPanel.vue` uses a fixed `450px` width.
-- `AppHeader.vue` keeps a `240px` agent selector plus several text buttons and status labels in one row.
+- `App.vue` 的 `.app-body` 在所有屏幕宽度下都是横向 `flex` 三栏。
+- `LeftSidebar.vue` 左侧栏固定 `312px`，折叠后也有 `68px`。
+- `RightPanel.vue` 右侧栏固定 `450px`。
+- `AppHeader.vue` 顶部有 `240px` 的 Agent 下拉框，以及多个文字按钮和状态文本。
 
-At a phone viewport width, the sidebars consume more width than the viewport before the chat surface is considered, so the page overflows horizontally and the chat input becomes uncomfortable.
+手机视口下，左右侧栏的固定宽度已经超过屏幕宽度，中间聊天区还没参与计算，页面就会横向溢出，聊天输入和阅读都会变得不方便。
 
-## Non-Goals
+## 非目标
 
-- Do not replace `element-plus`.
-- Do not replace `vue-element-plus-x`.
-- Do not change backend APIs, WebSocket contracts, agent/session stores, or MCP/tool logic.
-- Do not redesign the visual theme beyond responsive layout and spacing fixes.
-- Do not add native mobile app behavior; this remains a responsive web UI.
+- 不替换 `element-plus`。
+- 不替换 `vue-element-plus-x`。
+- 不改后端 API、WebSocket 协议、Agent/Session Store、MCP/工具逻辑。
+- 不做新的视觉主题重设计，只做响应式布局和必要间距调整。
+- 不实现原生 App 行为，本次仍然是响应式 Web UI。
 
-## Responsive Strategy
+## 响应式策略
 
-### Desktop
+### 电脑端
 
-Desktop behavior remains familiar:
+电脑端保持现有工作台结构：
 
-- Header at the top.
-- Left sidebar visible for conversations.
-- Center chat view fills remaining space.
-- Right panel visible for model, tools, MCP, skills, and status.
-- Existing collapse behavior for the left sidebar remains available.
+- 顶部 Header。
+- 左侧会话列表常驻显示。
+- 中间聊天区占据剩余空间。
+- 右侧模型、工具、MCP、Skills、状态面板常驻显示。
+- 左侧栏保留现有折叠能力。
 
-### Mobile
+### 手机端
 
-Phone-sized viewports switch to a single-column chat layout:
+手机宽度切换为单栏聊天布局：
 
-- The chat area is the default visible workspace.
-- The left conversation sidebar becomes an overlay drawer opened from the header.
-- The right tools/status panel becomes an overlay drawer opened from the header.
-- Header content is condensed so it fits in one row.
-- Chat messages, tool cards, code blocks, and the input area fit within the viewport without horizontal page overflow.
+- 默认只显示聊天主工作区。
+- 左侧会话列表变成从左侧打开的覆盖抽屉。
+- 右侧工具/状态面板变成从右侧打开的覆盖抽屉。
+- Header 精简为一行可用布局。
+- 聊天气泡、工具卡、代码块和输入框都不能撑出屏幕宽度。
 
-## Breakpoints
+## 断点
 
-Use CSS breakpoints rather than JavaScript viewport listeners:
+使用 CSS media query，不引入 JavaScript 监听窗口宽度：
 
-- `> 900px`: desktop layout.
-- `<= 900px`: mobile/tablet layout with drawer side panels.
-- `<= 520px`: phone tightening for header, chat padding, bubbles, and tool cards.
+- `> 900px`：电脑端三栏布局。
+- `<= 900px`：手机/平板抽屉布局。
+- `<= 520px`：手机紧凑布局，压缩 Header、聊天区 padding、气泡和工具卡间距。
 
-The `900px` breakpoint is intentionally generous because the existing right panel is `450px`; tablets and narrow desktop windows benefit from the mobile drawer pattern too.
+`900px` 断点故意设得偏宽，因为当前右侧栏有 `450px`。窄窗口桌面和平板也更适合抽屉模式。
 
-## Component Design
+## 组件设计
 
-### App Shell
+### 应用外壳
 
-`App.vue` owns responsive shell state:
+`App.vue` 管理响应式外壳状态：
 
-- `sidebarCollapsed`: existing desktop collapse state.
-- `mobileLeftOpen`: whether the conversation drawer is open on mobile.
-- `mobileRightOpen`: whether the tools/status drawer is open on mobile.
+- `sidebarCollapsed`：保留现有电脑端左栏折叠状态。
+- `mobileLeftOpen`：手机端会话抽屉是否打开。
+- `mobileRightOpen`：手机端工具/状态抽屉是否打开。
 
-The app body gains layout classes that distinguish desktop and mobile behavior using CSS. The sidebars remain mounted so their stores and component state do not need a second mobile-specific implementation.
+左右面板继续复用现有组件，不另写一套手机组件。这样会话列表、工具状态、Store 数据和内部交互都保持一致，只通过 CSS 在不同屏幕宽度下改变布局形态。
 
-### Header
+### 顶部 Header
 
-`AppHeader.vue` gets two optional mobile controls:
+`AppHeader.vue` 增加两个手机端入口：
 
-- A left menu button that opens the conversation drawer.
-- A right panel button that opens the tools/status drawer.
+- 左侧菜单按钮：打开会话抽屉。
+- 右侧工具按钮：打开工具/状态抽屉。
 
-On mobile:
+手机端 Header 调整：
 
-- The logo text may shrink.
-- The agent selector uses a fluid width with a smaller max width.
-- `编辑` and `+ 新Agent` are hidden because they are lower-frequency controls.
-- `+ 新对话` remains visible but becomes compact.
-- The long model badge is hidden.
-- The connected status keeps a small dot and may hide the text label on narrow phones.
+- Logo 文本适当缩小。
+- Agent 下拉框使用弹性宽度和较小最大宽度。
+- 隐藏低频按钮 `编辑` 和 `+ 新Agent`。
+- 保留 `+ 新对话`，但做成更紧凑的按钮。
+- 隐藏较长的模型 badge。
+- 保留连接状态小圆点；在很窄的手机上可以隐藏 `已连接/未连接` 文本。
 
-### Left Sidebar Drawer
+### 左侧会话抽屉
 
-`LeftSidebar.vue` is reused. On mobile, its width becomes `min(86vw, 340px)` and it is positioned as an overlay panel from the left. A backdrop closes the drawer when clicked.
+`LeftSidebar.vue` 继续复用。手机端宽度改为 `min(86vw, 340px)`，并固定覆盖在屏幕左侧。
 
-When a session is selected on mobile, `App.vue` closes the drawer after routing to the session.
+手机端点击遮罩关闭抽屉。点击某个会话并完成路由切换后，`App.vue` 自动关闭左侧抽屉。
 
-### Right Panel Drawer
+### 右侧工具/状态抽屉
 
-`RightPanel.vue` is reused. On mobile, its width becomes `min(90vw, 380px)` and it is positioned as an overlay panel from the right. A backdrop closes the drawer when clicked.
+`RightPanel.vue` 继续复用。手机端宽度改为 `min(90vw, 380px)`，并固定覆盖在屏幕右侧。
 
-The panel keeps its current sections, but padding is reduced slightly so MCP and skill rows remain readable.
+手机端点击遮罩关闭抽屉。面板内保留模型、工具、MCP、Skills、状态等现有内容，但适当缩小 padding，让 MCP 和 Skill 条目在手机上仍然可读。
 
-### Chat View
+### 聊天视图
 
-`ChatView.vue` gains mobile spacing rules:
+`ChatView.vue` 增加手机端间距规则：
 
-- Reduce `.messages-container` padding.
-- Increase bubble max width from desktop `85%` to mobile `100%`.
-- Ensure markdown code blocks and tool result blocks use horizontal scrolling instead of widening the page.
-- Keep the input fixed within the flex column rather than overlaying content.
+- 缩小 `.messages-container` padding。
+- 电脑端气泡最大宽度保持 `85%`，手机端提升到接近 `100%`。
+- Markdown 代码块和工具结果区域使用横向滚动，不能撑宽整个页面。
+- 输入框保持在 flex column 底部，不覆盖消息内容。
 
-### Chat Input
+### 聊天输入框
 
-`ChatInput.vue` gains mobile spacing rules:
+`ChatInput.vue` 增加手机端规则：
 
-- Reduce wrapper padding.
-- Ensure the Element Plus X sender is full width.
-- Keep the contenteditable area readable on small screens.
+- 缩小外层 padding。
+- 保证 Element Plus X 的 `XSender` 占满可用宽度。
+- 保证 `contenteditable` 输入区域在小屏幕上仍然可读、可点、可输入。
 
-## Accessibility and Interaction
+## 可访问性和交互
 
-- Mobile drawer buttons use Element Plus icon buttons with clear `aria-label` attributes.
-- Backdrop click closes an open drawer.
-- Pressing a session in the left drawer closes it on mobile.
-- Drawer panels should not create horizontal body scrolling.
-- The chat input remains reachable after opening and closing drawers.
+- 手机抽屉按钮使用 Element Plus 图标按钮，并提供明确的 `aria-label`。
+- 点击遮罩关闭已打开抽屉。
+- 手机端点击会话后关闭左侧抽屉。
+- 抽屉打开时不能导致 body 横向滚动。
+- 打开/关闭抽屉后，聊天输入框仍然可见且可用。
 
-## Testing Strategy
+## 测试策略
 
-### Automated Tests
+### 自动化测试
 
-Add component-level tests for the responsive shell behavior:
+为响应式外壳补组件级测试：
 
-- `AppHeader` renders mobile menu and tools buttons when handlers are supplied.
-- Clicking the mobile menu button emits `openMobileSidebar`.
-- Clicking the mobile tools button emits `openMobileTools`.
-- `App.vue` closes the mobile left drawer after a session switch.
+- `AppHeader` 在传入手机端事件处理器时渲染移动菜单按钮和工具按钮。
+- 点击移动菜单按钮会触发 `openMobileSidebar` 事件。
+- 点击移动工具按钮会触发 `openMobileTools` 事件。
+- `App.vue` 在手机端切换会话后会关闭左侧抽屉。
 
-Use the existing frontend test setup if present. If no frontend test runner exists, add a minimal Vitest + Vue Test Utils setup scoped to these responsive components.
+如果项目已有前端测试框架，沿用现有框架；如果没有，则新增最小的 Vitest + Vue Test Utils 配置，只覆盖这次响应式组件行为。
 
-### Build Verification
+### 构建验证
 
-Run:
+在 `D:\codes\lc-agent\frontend` 下运行：
 
 ```powershell
 npm run build
 ```
 
-from `D:\codes\lc-agent\frontend`.
+### 浏览器验证
 
-### Browser Verification
+重新构建并重启 bfzs 后验证：
 
-After rebuilding and restarting bfzs, verify:
+- 电脑视口，例如 `1440x900`：三栏布局仍然可用。
+- 手机视口，例如 `390x844`：没有页面级横向滚动，聊天输入可见，左抽屉可打开/关闭，右抽屉可打开/关闭。
+- 现有聊天发送流程在电脑和手机视口下都还能正常工作。
 
-- Desktop viewport, e.g. `1440x900`: three-column layout remains usable.
-- Phone viewport, e.g. `390x844`: no horizontal page overflow, chat input visible, left drawer opens/closes, right drawer opens/closes.
-- Existing chat send flow still works on desktop and mobile.
+## 风险
 
-## Risks
+- Vue Element Plus X 的内部 class 未来可能变化，因此样式覆盖应尽量聚焦布局，不依赖过多内部细节。
+- 复用左右面板组件可以保持行为一致，但 CSS 必须明确覆盖桌面端固定宽度。
+- Agent 名称过长时 Header 容易拥挤，需要限制宽度并使用省略号。
 
-- Element Plus X internal class names may change across versions. Keep selectors scoped and focused on layout rather than internal styling where possible.
-- Reusing the same sidebar components inside mobile drawers keeps behavior consistent, but CSS must carefully override fixed desktop widths.
-- Header controls can become crowded on very narrow phones if agent names are long; use constrained widths and ellipsis.
+## 验收标准
 
-## Acceptance Criteria
-
-- Desktop layout still shows left sidebar, chat area, and right panel at wide viewports.
-- Mobile layout shows only the chat workspace by default.
-- Mobile users can open and close conversation and tools/status drawers.
-- Mobile viewport has no document-level horizontal scrolling.
-- Chat input and message content remain usable at `390px` width.
-- Existing build succeeds.
+- 宽屏电脑端仍然显示左侧栏、聊天区和右侧面板。
+- 手机端默认只显示聊天主工作区。
+- 手机用户可以打开和关闭会话抽屉。
+- 手机用户可以打开和关闭工具/状态抽屉。
+- 手机视口没有文档级横向滚动。
+- `390px` 宽度下聊天输入和消息内容仍然可用。
+- 前端构建成功。
