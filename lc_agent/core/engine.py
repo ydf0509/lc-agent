@@ -223,17 +223,34 @@ class AgentEngine:
         thread_id: str,
         preset_id: str = "__chat__",
         model_id: str = "",
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[dict]:
         """Stream chat responses as events."""
         agent = self._get_or_build_agent(preset_id, model_id)
 
         config = {"configurable": {"thread_id": thread_id}}
+        input_messages = list(history or [])
+        input_messages.append({"role": "user", "content": message})
         async for event in agent.astream_events(
-            {"messages": [{"role": "user", "content": message}]},
+            {"messages": input_messages},
             config=config,
             version="v2",
         ):
             yield event
+
+    async def reset_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints for a thread if the checkpointer supports it."""
+        if not self._checkpointer:
+            return
+
+        deleter = getattr(self._checkpointer, "adelete_thread", None)
+        if callable(deleter):
+            await deleter(thread_id)
+            return
+
+        sync_deleter = getattr(self._checkpointer, "delete_thread", None)
+        if callable(sync_deleter):
+            sync_deleter(thread_id)
 
     async def generate_title(self, user_message: str, model_id: str = "") -> str:
         """Generate a short conversation title from the user's first message."""

@@ -28,7 +28,18 @@
           </div>
         </template>
         <template #header="{ item }">
-          <div v-if="item.role !== 'user'" class="role-header is-ai">
+          <div v-if="item.role === 'user'" class="role-header is-user">
+            <button
+              v-if="canEditMessage(item)"
+              class="message-edit-btn"
+              type="button"
+              title="编辑并重新发送"
+              @click.stop="startEditMessage(item)"
+            >
+              编辑
+            </button>
+          </div>
+          <div v-else class="role-header is-ai">
             <span class="role-header-icon" aria-hidden="true">
               <el-icon><Cpu /></el-icon>
             </span>
@@ -102,8 +113,11 @@
 
     <ChatInput
       :is-streaming="isStreaming"
+      :edit-content="editingContent"
+      :is-editing="Boolean(editingMessageId)"
       @send="handleSend"
       @stop="handleStop"
+      @cancel-edit="cancelEdit"
     />
 
     <InterruptDialog
@@ -114,13 +128,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
 import { Cpu, User } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
-import type { ToolCall, MessageUsage } from '@/stores/chat'
+import type { ToolCall, MessageUsage, ReplayMessage } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
@@ -137,6 +151,7 @@ interface ContentSegment {
 
 type ChatBubbleItem = BubbleListItemProps & {
   role: 'user' | 'ai'
+  messageId: string
   isMarkdown?: boolean
   toolCalls?: ToolCall[]
   segments?: ContentSegment[]
@@ -147,6 +162,8 @@ const chatStore = useChatStore()
 const agentsStore = useAgentsStore()
 const toolsStore = useToolsStore()
 const { messages, isStreaming, interrupt } = storeToRefs(chatStore)
+const editingMessageId = ref<string | null>(null)
+const editingContent = ref('')
 
 const isLoading = computed(() => {
   const msgs = messages.value
@@ -160,6 +177,7 @@ const bubbleList = computed((): ChatBubbleItem[] =>
     .filter(msg => msg.role === 'user' || msg.role === 'assistant')
     .map((msg, idx, arr) => ({
       key: msg.id,
+      messageId: msg.id,
       role: msg.role === 'assistant' ? 'ai' : 'user',
       placement: msg.role === 'user' ? 'end' : 'start',
       content: msg.content || '',
@@ -181,6 +199,10 @@ const bubbleList = computed((): ChatBubbleItem[] =>
     })),
 )
 
+const lastUserMessage = computed(() =>
+  [...messages.value].reverse().find(msg => msg.role === 'user'),
+)
+
 function getAssistantLabel(): string {
   return agentsStore.currentAgent?.name || 'AI'
 }
@@ -190,6 +212,23 @@ function getModelLabel(): string {
   if (!model) return '模型未选择'
   const parts = model.split('/')
   return parts[parts.length - 1] || model
+}
+
+function canEditMessage(item: ChatBubbleItem) {
+  return item.role === 'user'
+    && lastUserMessage.value?.id === item.messageId
+    && !isStreaming.value
+}
+
+function startEditMessage(item: ChatBubbleItem) {
+  if (!canEditMessage(item)) return
+  editingMessageId.value = item.messageId
+  editingContent.value = item.content || ''
+}
+
+function cancelEdit() {
+  editingMessageId.value = null
+  editingContent.value = ''
 }
 
 function hasStructuredSegments(content: string, toolCalls?: ToolCall[]): boolean {
@@ -221,6 +260,26 @@ function formatCompactTokens(n: number): string {
 
 function stripThinkingMarkers(content: string): string {
   return content.replace(/<!--(?:THINK_START|THINK_END)-->/g, '').trim()
+}
+
+function stripUiMarkers(content: string): string {
+  return stripThinkingMarkers(content).replace(/<!--TOOL:\d+-->/g, '').trim()
+}
+
+function getReplayHistory(beforeMessageId: string): ReplayMessage[] {
+  const idx = messages.value.findIndex(msg => msg.id === beforeMessageId)
+  if (idx < 0) return []
+
+  return messages.value
+    .slice(0, idx)
+    .filter((msg): msg is typeof msg & { role: 'user' | 'assistant' } =>
+      msg.role === 'user' || msg.role === 'assistant',
+    )
+    .map(msg => ({
+      role: msg.role,
+      content: stripUiMarkers(msg.content || ''),
+    }))
+    .filter(msg => msg.content.trim())
 }
 
 function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[] {
@@ -271,7 +330,16 @@ function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[
 }
 
 function handleSend(content: string) {
-  chatStore.sendMessage(content, agentsStore.currentAgentId, toolsStore.currentModel)
+  const editMessageId = editingMessageId.value
+  const history = editMessageId ? getReplayHistory(editMessageId) : undefined
+  if (editingMessageId.value) {
+    chatStore.truncateAfterMessage(editingMessageId.value)
+    cancelEdit()
+  }
+  chatStore.sendMessage(content, agentsStore.currentAgentId, toolsStore.currentModel, {
+    replaceFromMessageId: editMessageId || undefined,
+    history,
+  })
 }
 
 function handleStop() {
@@ -395,7 +463,10 @@ onBeforeUnmount(() => {
 }
 
 .messages-container :deep(.elx-bubble--end .elx-bubble__header) {
-  display: none;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 22px;
+  margin-bottom: 4px;
 }
 
 .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
@@ -428,6 +499,37 @@ onBeforeUnmount(() => {
   justify-content: center;
   border: 1px solid var(--el-border-color);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.role-header.is-user {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.message-edit-btn {
+  border: 1px solid color-mix(in srgb, var(--el-color-success) 34%, var(--el-border-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--el-color-success) 12%, var(--el-bg-color-overlay));
+  color: var(--el-color-success);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  padding: 5px 9px;
+  transform: translateY(2px);
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.messages-container :deep(.elx-bubble--end:hover) .message-edit-btn,
+.message-edit-btn:focus-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.message-edit-btn:hover {
+  background: color-mix(in srgb, var(--el-color-success) 22%, var(--el-bg-color-overlay));
 }
 
 .role-avatar.is-user {

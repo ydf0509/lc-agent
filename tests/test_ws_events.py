@@ -265,3 +265,59 @@ async def test_handle_message_persists_user_and_assistant_ui_messages(handler):
     assert records[1].tool_calls[0]["runId"] == "run-1"
     assert records[1].tool_calls[0]["result"] == "funboost 是任务队列框架"
     assert records[1].usage["rounds"][0]["total_tokens"] == 16
+
+
+@pytest.mark.asyncio
+async def test_handle_message_edit_resets_thread_and_replays_kept_history(handler):
+    from lc_agent.db.engine import get_async_session, init_db, reset_engine
+    from lc_agent.db.repository import ChatUiMessageRepository
+
+    reset_engine()
+    await init_db("sqlite+aiosqlite:///:memory:")
+
+    async with get_async_session("sqlite+aiosqlite:///:memory:") as session:
+        repo = ChatUiMessageRepository(session)
+        kept = await repo.create(session_id="thread-edit", role="user", content="第一问")
+        edited = await repo.create(session_id="thread-edit", role="user", content="旧问题")
+        await repo.create(session_id="thread-edit", role="assistant", content="旧回答")
+
+    ws = AsyncMock()
+    captured = {}
+    handler.engine.reset_thread = AsyncMock()
+
+    async def fake_stream(msg, tid, pid, model_id="", history=None):
+        captured["message"] = msg
+        captured["thread_id"] = tid
+        captured["history"] = history
+        chunk = MagicMock()
+        chunk.content = "新回答"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+    handler.engine.chat_stream = fake_stream
+
+    await handler.handle_message(
+        ws,
+        "thread-edit",
+        {
+            "type": "message",
+            "content": "新问题",
+            "preset_id": "__chat__",
+            "replace_from_message_id": edited.id,
+            "history": [{"role": "user", "content": "第一问"}],
+        },
+    )
+
+    handler.engine.reset_thread.assert_awaited_once_with("thread-edit")
+    assert captured == {
+        "message": "新问题",
+        "thread_id": "thread-edit",
+        "history": [{"role": "user", "content": "第一问"}],
+    }
+
+    async with get_async_session("sqlite+aiosqlite:///:memory:") as session:
+        records = await ChatUiMessageRepository(session).list_by_session("thread-edit")
+
+    assert [r.id for r in records[:1]] == [kept.id]
+    assert [r.role for r in records] == ["user", "user", "assistant"]
+    assert [r.content for r in records] == ["第一问", "新问题", "新回答"]

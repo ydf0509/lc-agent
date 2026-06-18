@@ -135,3 +135,22 @@ async def test_chat_ui_message_repository_preserves_tool_calls_and_usage():
         assert messages[1].content == "我查到了。\n<!--TOOL:0-->\n结论如下。"
         assert messages[1].tool_calls[0]["runId"] == "run-1"
         assert messages[1].usage["rounds"][0]["total_tokens"] == 20
+
+
+@pytest.mark.asyncio
+async def test_chat_ui_message_repository_truncates_from_message_id():
+    async with get_async_session("sqlite+aiosqlite:///:memory:") as session:
+        repo = ChatUiMessageRepository(session)
+
+        kept = await repo.create(session_id="thread-edit", role="user", content="第一问")
+        edited = await repo.create(session_id="thread-edit", role="user", content="第二问旧内容")
+        await repo.create(session_id="thread-edit", role="assistant", content="旧回答")
+        await repo.create(session_id="other-thread", role="user", content="别的会话")
+
+        deleted = await repo.truncate_from_message("thread-edit", edited.id)
+        messages = await repo.list_by_session("thread-edit")
+        other_messages = await repo.list_by_session("other-thread")
+
+        assert deleted == 2
+        assert [m.id for m in messages] == [kept.id]
+        assert [m.content for m in other_messages] == ["别的会话"]

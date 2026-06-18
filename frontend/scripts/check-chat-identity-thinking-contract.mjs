@@ -30,7 +30,7 @@ expectIncludes('ChatView.vue', files.chatView, '#avatar="{ item }"')
 expectIncludes('ChatView.vue', files.chatView, '#header="{ item }"')
 expectIncludes('ChatView.vue', files.chatView, 'class="role-avatar"')
 expectIncludes('ChatView.vue', files.chatView, 'class="role-header is-ai"')
-expectMatch('ChatView.vue', files.chatView, /v-if="item\.role !== 'user'"\s+class="role-header is-ai"/, '助手身份栏没有限制为仅助手消息展示')
+expectMatch('ChatView.vue', files.chatView, /v-else\s+class="role-header is-ai"/, '助手身份栏没有限制为仅助手消息展示')
 expectIncludes('ChatView.vue', files.chatView, 'getAssistantLabel()')
 expectIncludes('ChatView.vue', files.chatView, 'getModelLabel()')
 expectIncludes('ChatView.vue', files.chatView, "type: 'thinking'")
@@ -60,7 +60,12 @@ expectIncludes('chat.ts', files.chatStore, 'function mergeFinalUsageRounds')
 expectIncludes('chat.ts', files.chatStore, 'reasoningTokens: msg.reasoning_tokens || 0')
 expectIncludes('chat.ts', files.chatStore, 'mergeFinalUsageRounds(last.usage.rounds, usageData)')
 expectIncludes('chat.ts', files.chatStore, 'model: modelId')
-expectIncludes('ChatView.vue', files.chatView, 'chatStore.sendMessage(content, agentsStore.currentAgentId, toolsStore.currentModel)')
+expectMatch(
+  'ChatView.vue',
+  files.chatView,
+  /chatStore\.sendMessage\(\s*content,\s*agentsStore\.currentAgentId,\s*toolsStore\.currentModel/,
+  '发送消息必须继续使用当前 Agent 和当前模型',
+)
 expectIncludes('ChatInput.vue', files.chatInput, "send: [content: string]")
 expectIncludes('ChatView.vue', files.chatView, ':title="item.role === \'user\' ? \'你\' : getAssistantLabel()"')
 if (/<span class="role-name">\{\{\s*item\.role === 'user' \? '你'/.test(files.chatView)) {

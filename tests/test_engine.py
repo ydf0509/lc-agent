@@ -111,6 +111,59 @@ class TestAgentEngine:
         ]
         assert engine.get_default_preset().default_model == "test-model"
 
+    @pytest.mark.asyncio
+    async def test_chat_stream_accepts_replay_history(self, sample_config, monkeypatch):
+        from lc_agent.core.engine import AgentEngine
+
+        engine = AgentEngine(sample_config)
+        captured = {}
+
+        class FakeAgent:
+            async def astream_events(self, inputs, config, version):
+                captured["inputs"] = inputs
+                captured["config"] = config
+                captured["version"] = version
+                if False:
+                    yield {}
+
+        monkeypatch.setattr(engine, "_get_or_build_agent", lambda preset_id, model_id="": FakeAgent())
+
+        events = []
+        async for event in engine.chat_stream(
+            "新问题",
+            "thread-1",
+            history=[{"role": "user", "content": "第一问"}],
+        ):
+            events.append(event)
+
+        assert captured["inputs"] == {
+            "messages": [
+                {"role": "user", "content": "第一问"},
+                {"role": "user", "content": "新问题"},
+            ]
+        }
+        assert captured["config"] == {"configurable": {"thread_id": "thread-1"}}
+        assert captured["version"] == "v2"
+        assert events == []
+
+    @pytest.mark.asyncio
+    async def test_reset_thread_uses_checkpointer_delete(self, sample_config):
+        from lc_agent.core.engine import AgentEngine
+
+        class FakeCheckpointer:
+            def __init__(self):
+                self.calls = []
+
+            async def adelete_thread(self, thread_id):
+                self.calls.append(thread_id)
+
+        checkpointer = FakeCheckpointer()
+        engine = AgentEngine(sample_config, checkpointer=checkpointer)
+
+        await engine.reset_thread("thread-reset")
+
+        assert checkpointer.calls == ["thread-reset"]
+
 
 class TestCreateLlm:
     """Test _create_llm method with ChatOpenAIReasoning and init_chat_model."""

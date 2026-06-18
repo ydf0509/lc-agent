@@ -35,7 +35,13 @@ function Get-PortProcessIds {
 
     $ids = @()
     try {
-        $ids += (Get-NetTCPConnection -LocalPort $TargetPort -ErrorAction SilentlyContinue).OwningProcess
+        $tcpConnections = Get-NetTCPConnection -LocalPort $TargetPort -ErrorAction SilentlyContinue
+        foreach ($conn in $tcpConnections) {
+            # TIME_WAIT 状态的连接进程已死，端口未真正释放，跳过
+            if ($conn.State -ne 'TimeWait') {
+                $ids += $conn.OwningProcess
+            }
+        }
     } catch {
         Write-Host "  Get-NetTCPConnection failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
@@ -44,7 +50,11 @@ function Get-PortProcessIds {
     foreach ($line in $netstatLines) {
         $parts = ($line.ToString().Trim() -split "\s+")
         if ($parts.Length -ge 5 -and $parts[1] -match ":$TargetPort$") {
-            $ids += [int]$parts[-1]
+            $foundPid = [int]$parts[-1]
+            # 只保留进程实际存活的 PID
+            if ($foundPid -ne 0 -and (Get-Process -Id $foundPid -ErrorAction SilentlyContinue)) {
+                $ids += $foundPid
+            }
         }
     }
 

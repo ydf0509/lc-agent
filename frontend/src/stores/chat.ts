@@ -52,6 +52,16 @@ export interface InterruptInfo {
   reviewConfigs: any[]
 }
 
+export interface ReplayMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface SendMessageOptions {
+  replaceFromMessageId?: string
+  history?: ReplayMessage[]
+}
+
 function normalizeToolStatus(status: any): ToolCall['status'] {
   if (status === 'pending' || status === 'running' || status === 'done' || status === 'error') {
     return status
@@ -352,7 +362,12 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendMessage(content: string, presetId: string = '__chat__', modelId: string = '') {
+  async function sendMessage(
+    content: string,
+    presetId: string = '__chat__',
+    modelId: string = '',
+    options: SendMessageOptions = {},
+  ) {
     if (!content.trim()) return
 
     const sessionsStore = useSessionsStore()
@@ -385,6 +400,8 @@ export const useChatStore = defineStore('chat', () => {
       content: content.trim(),
       preset_id: presetId,
       model: modelId,
+      replace_from_message_id: options.replaceFromMessageId,
+      history: options.history,
     })
   }
 
@@ -414,6 +431,12 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
+  function truncateAfterMessage(messageId: string) {
+    const idx = messages.value.findIndex(m => m.id === messageId)
+    if (idx < 0) return
+    messages.value = messages.value.slice(0, idx)
+  }
+
   function disconnect() {
     ws.value?.disconnect()
     isConnected.value = false
@@ -434,6 +457,7 @@ export const useChatStore = defineStore('chat', () => {
     stopGeneration,
     respondToInterrupt,
     clearMessages,
+    truncateAfterMessage,
     disconnect,
   }
 })

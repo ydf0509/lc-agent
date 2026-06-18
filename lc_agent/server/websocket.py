@@ -44,6 +44,8 @@ class ChatWebSocketHandler:
             content = data.get("content", "")
             preset_id = data.get("preset_id", "__chat__")
             model_id = data.get("model", "")
+            replace_from_message_id = data.get("replace_from_message_id")
+            replay_history = data.get("history") or []
             self._cancel_flags[thread_id] = False
             usage_rounds: list[dict] = []
             round_start_time = time.time()
@@ -63,12 +65,16 @@ class ChatWebSocketHandler:
                 asyncio.create_task(self._save_title(thread_id, preliminary_title))
 
             try:
+                if replace_from_message_id:
+                    await self._truncate_from_message(thread_id, replace_from_message_id)
+                    await self.engine.reset_thread(thread_id)
                 await self._save_ui_message(thread_id, "user", content)
-                stream = (
-                    self.engine.chat_stream(content, thread_id, preset_id, model_id=model_id)
-                    if model_id
-                    else self.engine.chat_stream(content, thread_id, preset_id)
-                )
+                stream_kwargs: dict[str, Any] = {}
+                if model_id:
+                    stream_kwargs["model_id"] = model_id
+                if replace_from_message_id:
+                    stream_kwargs["history"] = replay_history
+                stream = self.engine.chat_stream(content, thread_id, preset_id, **stream_kwargs)
                 async for event in stream:
                     if self._cancel_flags.get(thread_id):
                         await websocket.send_json({"type": "cancelled"})
@@ -220,6 +226,21 @@ class ChatWebSocketHandler:
                 await session.close()
         except Exception as e:
             print(f"[WS] Failed to persist UI message for {thread_id}: {e}")
+
+    async def _truncate_from_message(self, thread_id: str, message_id: str):
+        """Delete persisted UI messages from the edited anchor onward."""
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import ChatUiMessageRepository
+
+            session = get_async_session()
+            try:
+                repo = ChatUiMessageRepository(session)
+                await repo.truncate_from_message(thread_id, message_id)
+            finally:
+                await session.close()
+        except Exception as e:
+            print(f"[WS] Failed to truncate UI messages for {thread_id}: {e}")
 
     def _accumulate_assistant_display_state(
         self,
