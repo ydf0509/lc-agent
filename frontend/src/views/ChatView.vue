@@ -250,6 +250,8 @@ onBeforeUnmount(() => {
 }
 
 .messages-container {
+  --chat-assistant-bubble-width: min(85%, 920px);
+  --chat-user-bubble-max-width: min(78%, 720px);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -264,7 +266,30 @@ onBeforeUnmount(() => {
 }
 
 .messages-container :deep(.elx-bubble) {
-  max-width: 85% !important;
+  max-width: 100% !important;
+}
+
+.messages-container :deep(.elx-bubble--start) {
+  width: var(--chat-assistant-bubble-width) !important;
+  max-width: var(--chat-assistant-bubble-width) !important;
+  align-self: flex-start;
+}
+
+.messages-container :deep(.elx-bubble--end) {
+  width: fit-content;
+  max-width: var(--chat-user-bubble-max-width) !important;
+  align-self: flex-end;
+}
+
+.messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--start .elx-bubble__content) {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--end .elx-bubble__content) {
+  max-width: 100% !important;
 }
 
 .messages-container :deep(.elx-bubble__content) {
@@ -326,6 +351,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 900px) {
   .messages-container {
+    --chat-assistant-bubble-width: 100%;
+    --chat-user-bubble-max-width: min(86%, 680px);
     padding: 12px;
   }
 
@@ -336,6 +363,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 520px) {
   .messages-container {
+    --chat-user-bubble-max-width: 88%;
     padding: 8px;
   }
 
