@@ -95,6 +95,32 @@ async def test_handle_message_passes_preset_id(handler):
 
 
 @pytest.mark.asyncio
+async def test_handle_message_passes_selected_model(handler):
+    """handle_message should pass the frontend selected model to chat_stream."""
+    ws = AsyncMock()
+    captured = {}
+
+    async def fake_stream(msg, tid, pid, model_id=""):
+        captured["model_id"] = model_id
+        chunk = MagicMock()
+        chunk.content = "hi"
+        chunk.additional_kwargs = {}
+        yield {"event": "on_chat_model_stream", "data": {"chunk": chunk}}
+
+    handler.engine.chat_stream = fake_stream
+
+    data = {
+        "type": "message",
+        "content": "hello",
+        "preset_id": "my_agent",
+        "model": "ark-deepseek-v4-flash",
+    }
+    await handler.handle_message(ws, "thread-1", data)
+
+    assert captured["model_id"] == "ark-deepseek-v4-flash"
+
+
+@pytest.mark.asyncio
 async def test_first_message_sends_title_update_immediately(handler):
     """First message should send title_update with user content before streaming."""
     ws = AsyncMock()

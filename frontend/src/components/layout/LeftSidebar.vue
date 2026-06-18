@@ -31,15 +31,17 @@
         @menu-command="handleMenuCommand"
       >
         <template #groupTitle="{ group }">
-          <div
-            class="group-header"
-            :data-group="group.title"
-            :class="{ 'is-collapsed': collapsedGroups.has(group.title) }"
-            @click.stop="toggleGroup(group.title)"
-          >
-            <span class="group-arrow" :class="{ collapsed: collapsedGroups.has(group.title) }">▶</span>
-            <span class="group-name">{{ group.title }}</span>
-            <span class="group-count">{{ group.children?.length || 0 }}</span>
+          <div class="agent-card-shell">
+            <div
+              class="agent-group-header"
+              :data-group="group.title"
+              :class="{ 'is-collapsed': collapsedGroups.has(group.title), 'is-active-agent': group.title === activeAgentName }"
+              @click.stop="toggleGroup(group.title)"
+            >
+              <span class="agent-group-arrow" :class="{ collapsed: collapsedGroups.has(group.title) }">▶</span>
+              <span class="agent-group-name">{{ group.title }}</span>
+              <span class="agent-card-count">{{ group.children?.length || 0 }}</span>
+            </div>
           </div>
         </template>
       </Conversations>
@@ -48,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect, nextTick, onMounted } from 'vue'
+import { computed, ref, watchEffect, nextTick } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { Conversations } from 'vue-element-plus-x'
 import type { ConversationItem, ConversationMenuCommand } from 'vue-element-plus-x/types/Conversations'
@@ -61,7 +63,23 @@ const sessionsStore = useSessionsStore()
 const agentsStore = useAgentsStore()
 const emit = defineEmits<{ newChat: []; switchSession: [id: string]; toggleCollapse: [] }>()
 
-const collapsedGroups = ref<Set<string>>(new Set())
+const SIDEBAR_COLLAPSED_GROUPS_KEY = 'lc-agent:sidebar:collapsed-agent-groups'
+
+function loadCollapsedGroups() {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_COLLAPSED_GROUPS_KEY)
+    const names = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(names) ? names.filter((name): name is string => typeof name === 'string') : [])
+  } catch {
+    return new Set<string>()
+  }
+}
+
+function persistCollapsedGroups() {
+  localStorage.setItem(SIDEBAR_COLLAPSED_GROUPS_KEY, JSON.stringify([...collapsedGroups.value]))
+}
+
+const collapsedGroups = ref<Set<string>>(loadCollapsedGroups())
 
 const allCollapsed = computed(() => {
   const groupNames = new Set(conversationItems.value.map(i => i.group).filter(Boolean))
@@ -69,16 +87,19 @@ const allCollapsed = computed(() => {
 })
 
 function toggleGroup(title: string) {
+  const next = new Set(collapsedGroups.value)
   if (collapsedGroups.value.has(title)) {
-    collapsedGroups.value.delete(title)
+    next.delete(title)
   } else {
-    collapsedGroups.value.add(title)
+    next.add(title)
   }
+  collapsedGroups.value = next
+  persistCollapsedGroups()
   nextTick(syncCollapsedDOM)
 }
 
 function syncCollapsedDOM() {
-  const headers = document.querySelectorAll('.group-header[data-group]')
+  const headers = document.querySelectorAll('.agent-group-header[data-group]')
   headers.forEach(header => {
     const groupName = header.getAttribute('data-group') || ''
     const groupItems = header.closest('.elx-conversations__group')?.querySelector('.elx-conversations__group-items') as HTMLElement | null
@@ -94,11 +115,14 @@ function syncCollapsedDOM() {
 
 function toggleAllGroups() {
   if (allCollapsed.value) {
-    collapsedGroups.value.clear()
+    collapsedGroups.value = new Set()
   } else {
-    const groupNames = new Set(conversationItems.value.map(i => i.group).filter(Boolean))
-    collapsedGroups.value = groupNames as Set<string>
+    const groupNames = conversationItems.value
+      .map(i => i.group)
+      .filter((name): name is string => typeof name === 'string')
+    collapsedGroups.value = new Set(groupNames)
   }
+  persistCollapsedGroups()
   nextTick(syncCollapsedDOM)
 }
 
@@ -113,6 +137,21 @@ const conversationItems = computed<ConversationItem[]>(() =>
 const currentSessionId = computed({
   get: () => sessionsStore.currentSessionId ?? undefined,
   set: (_val: string | number | undefined) => { /* handled by @change */ },
+})
+
+const activeAgentName = computed(() => {
+  const session = sessionsStore.sessions.find(s => s.id === sessionsStore.currentSessionId)
+  return agentsStore.getAgentName(session?.agent_id || '__chat__')
+})
+
+watchEffect(() => {
+  const groupNames = new Set(conversationItems.value.map(i => i.group).filter((name): name is string => typeof name === 'string'))
+  const pruned = new Set([...collapsedGroups.value].filter(name => groupNames.has(name)))
+  if (pruned.size !== collapsedGroups.value.size) {
+    collapsedGroups.value = pruned
+    persistCollapsedGroups()
+  }
+  nextTick(syncCollapsedDOM)
 })
 
 function handleSessionChange(item: ConversationItem) {
@@ -155,12 +194,33 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
 <style scoped>
 .left-sidebar {
   width: 312px;
+  --sidebar-agent-card-bg: color-mix(in srgb, var(--el-bg-color-overlay) 78%, var(--el-fill-color-light));
+  --sidebar-agent-card-border: var(--el-border-color-lighter);
+  --sidebar-agent-card-active-border: color-mix(in srgb, var(--el-color-primary) 62%, var(--el-border-color));
+  --sidebar-agent-card-active-bg: color-mix(in srgb, var(--el-color-primary-light-9) 82%, var(--el-bg-color));
+  --sidebar-agent-card-active-ring: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+  --sidebar-agent-card-count-bg: var(--el-fill-color-light);
+  --sidebar-agent-card-count-color: var(--el-text-color-secondary);
+  --sidebar-session-hover-bg: color-mix(in srgb, var(--el-color-success) 16%, var(--el-bg-color-overlay));
+  --sidebar-session-hover-color: var(--el-text-color-primary);
   background: var(--el-bg-color);
   border-right: 1px solid var(--el-border-color);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:global(html.dark) .left-sidebar {
+  --sidebar-agent-card-bg: color-mix(in srgb, var(--el-bg-color-overlay) 82%, white 4%);
+  --sidebar-agent-card-border: color-mix(in srgb, var(--el-border-color) 76%, white 8%);
+  --sidebar-agent-card-active-border: color-mix(in srgb, var(--el-color-primary) 72%, white 8%);
+  --sidebar-agent-card-active-bg: color-mix(in srgb, var(--el-color-primary) 14%, var(--el-bg-color-overlay));
+  --sidebar-agent-card-active-ring: color-mix(in srgb, var(--el-color-primary) 24%, transparent);
+  --sidebar-agent-card-count-bg: color-mix(in srgb, var(--el-fill-color) 84%, white 8%);
+  --sidebar-agent-card-count-color: var(--el-text-color-regular);
+  --sidebar-session-hover-bg: color-mix(in srgb, var(--el-color-success) 30%, #10261d);
+  --sidebar-session-hover-color: #f8fafc;
 }
 
 .left-sidebar.collapsed {
@@ -258,20 +318,54 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
   border-radius: 0 !important;
 }
 
+.session-list :deep(.elx-conversations__group) {
+  margin: 8px 6px 10px;
+  border: 1px solid var(--sidebar-agent-card-border);
+  border-radius: 8px;
+  background: var(--sidebar-agent-card-bg);
+  overflow: hidden;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.session-list :deep(.elx-conversations__group:has(.agent-group-header.is-active-agent)) {
+  border-color: var(--sidebar-agent-card-active-border);
+  box-shadow: 0 0 0 1px var(--sidebar-agent-card-active-ring);
+}
+
+.session-list :deep(.elx-conversations__group-items) {
+  padding: 2px 6px 7px;
+}
+
 .session-list :deep(.elx-conversations-item) {
   margin: 0;
-  padding: 8px 8px;
+  padding: 8px 9px;
   border-radius: 6px;
   color: var(--el-text-color-regular);
 }
 
 .session-list :deep(.elx-conversations-item__label) {
-  max-width: none !important;
+  max-width: 100% !important;
   color: var(--el-text-color-regular) !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-list :deep(.elx-conversations-item:hover) {
+  background: var(--sidebar-session-hover-bg) !important;
+  color: var(--sidebar-session-hover-color) !important;
+}
+
+.session-list :deep(.elx-conversations-item:hover .elx-conversations-item__label) {
+  color: var(--sidebar-session-hover-color) !important;
+}
+
+.session-list :deep(.elx-conversations-item:hover .elx-conversations-item__menu) {
+  color: var(--sidebar-session-hover-color) !important;
 }
 
 .session-list :deep(.elx-conversations-item--active) {
-  background: var(--el-color-primary-light-9) !important;
+  background: var(--sidebar-agent-card-active-bg) !important;
 }
 
 .session-list :deep(.elx-conversations-item--active .elx-conversations-item__label) {
@@ -279,30 +373,29 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
   font-weight: 600;
 }
 
-/* Group header custom styling */
-.group-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 8px 4px 8px;
-  margin-top: 4px;
-  cursor: pointer;
-  border-top: 1px solid var(--el-border-color-lighter);
-  user-select: none;
-  transition: background 0.15s;
-  border-radius: 4px;
+.agent-card-shell {
+  width: 100%;
 }
 
-.group-header:hover {
+.agent-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.agent-group-header:hover {
   background: var(--el-fill-color-lighter);
 }
 
-.session-list :deep(.elx-conversations__group:first-child .group-header) {
-  border-top: none;
-  margin-top: 0;
+.agent-group-header.is-active-agent {
+  background: var(--sidebar-agent-card-active-bg);
 }
 
-.group-arrow {
+.agent-group-arrow {
   font-size: 9px;
   color: var(--el-text-color-secondary);
   transition: transform 0.2s ease;
@@ -310,26 +403,28 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
   flex-shrink: 0;
 }
 
-.group-arrow.collapsed {
+.agent-group-arrow.collapsed {
   transform: rotate(0deg);
 }
 
-.group-name {
+.agent-group-name {
   font-size: 12px;
   font-weight: 700;
   color: var(--el-text-color-primary);
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.group-count {
+.agent-card-count {
   font-size: 10px;
-  color: var(--el-text-color-placeholder);
-  background: var(--el-fill-color);
-  padding: 1px 5px;
+  font-weight: 600;
+  color: var(--sidebar-agent-card-count-color);
+  background: var(--sidebar-agent-card-count-bg);
+  padding: 1px 6px;
   border-radius: 8px;
   flex-shrink: 0;
 }
@@ -370,6 +465,14 @@ async function handleMenuCommand(command: ConversationMenuCommand, item: Convers
 
   .session-list {
     overflow-y: auto;
+  }
+
+  .session-list :deep(.elx-conversations__group) {
+    margin: 7px 4px 9px;
+  }
+
+  .agent-group-header {
+    padding: 9px 10px;
   }
 }
 </style>

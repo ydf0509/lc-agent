@@ -16,6 +16,7 @@ class SessionCreateRequest(BaseModel):
 
 class SessionUpdateRequest(BaseModel):
     title: str | None = None
+    model: str | None = None
 
 
 @router.get("/sessions")

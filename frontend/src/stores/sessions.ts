@@ -59,14 +59,14 @@ export const useSessionsStore = defineStore('sessions', () => {
     return session
   }
 
-  async function persistSession(id: string): Promise<string> {
+  async function persistSession(id: string, model: string = ''): Promise<string> {
     if (!localSessionIds.value.has(id)) return id
     const session = sessions.value.find(s => s.id === id)
     if (!session) return id
 
     const created = await api.createSession({
       agent_id: session.agent_id,
-      model: session.model,
+      model: model || session.model,
     })
     localSessionIds.value.delete(id)
     const newId = created.id || id
@@ -113,6 +113,19 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (sess) sess.title = title
   }
 
+  async function updateModel(id: string, model: string) {
+    const sess = sessions.value.find(s => s.id === id)
+    if (sess) sess.model = model
+    if (!localSessionIds.value.has(id)) {
+      await api.updateSession(id, { model })
+    }
+  }
+
+  function updateModelLocal(id: string, model: string) {
+    const sess = sessions.value.find(s => s.id === id)
+    if (sess) sess.model = model
+  }
+
   const groupedByAgent = computed(() => {
     const agentsStore = useAgentsStore()
     const groups: Record<string, { agentName: string; agentSource: string; sessions: Session[] }> = {}
@@ -140,5 +153,5 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = id
   }
 
-  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, selectSession }
+  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, updateModel, updateModelLocal, selectSession }
 })

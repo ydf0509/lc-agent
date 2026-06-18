@@ -14,6 +14,28 @@
         :auto-scroll="isStreaming"
         :virtual="false"
       >
+        <template #avatar="{ item }">
+          <div
+            class="role-avatar"
+            :class="item.role === 'user' ? 'is-user' : 'is-ai'"
+            :title="item.role === 'user' ? '你' : getAssistantLabel()"
+            :aria-label="item.role === 'user' ? '你' : getAssistantLabel()"
+          >
+            <el-icon>
+              <User v-if="item.role === 'user'" />
+              <Cpu v-else />
+            </el-icon>
+          </div>
+        </template>
+        <template #header="{ item }">
+          <div v-if="item.role !== 'user'" class="role-header is-ai">
+            <span class="role-header-icon" aria-hidden="true">
+              <el-icon><Cpu /></el-icon>
+            </span>
+            <span class="role-name">{{ getAssistantLabel() }}</span>
+            <span class="role-model">{{ getModelLabel() }}</span>
+          </div>
+        </template>
         <template #content="{ item }">
           <div class="bubble-content-wrap">
             <template v-if="item.segments && item.segments.length > 0">
@@ -23,6 +45,17 @@
                   class="markdown-body"
                   v-html="renderMarkdown(seg.text)"
                 />
+                <details
+                  v-else-if="seg.type === 'thinking' && seg.text"
+                  class="thinking-block"
+                  open
+                >
+                  <summary class="thinking-summary">
+                    <el-icon><Cpu /></el-icon>
+                    <span>思考过程</span>
+                  </summary>
+                  <div class="markdown-body thinking-body" v-html="renderMarkdown(seg.text)" />
+                </details>
                 <div v-else-if="seg.type === 'tool' && item.toolCalls && seg.toolIndex != null" class="tool-call-inline">
                   <ToolCallCard
                     :tool-call="item.toolCalls[seg.toolIndex!]"
@@ -39,6 +72,19 @@
               />
               <span v-else>{{ item.content }}</span>
             </template>
+            <div
+              v-if="shouldShowReasoningNotice(item)"
+              class="thinking-unavailable"
+            >
+              <el-icon><Cpu /></el-icon>
+              <div class="thinking-unavailable-text">
+                <strong>模型进行了内部推理</strong>
+                <span>
+                  本轮消耗 {{ formatCompactTokens(getReasoningTokenTotal(item.usage)) }} reasoning tokens，
+                  但供应商没有返回可展示的思考文字。
+                </span>
+              </div>
+            </div>
             <TokenUsagePanel
               v-if="item.usage"
               :usage="item.usage"
@@ -72,9 +118,11 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
+import { Cpu, User } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
 import type { ToolCall, MessageUsage } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
+import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
@@ -82,12 +130,13 @@ import ToolCallCard from '@/components/chat/ToolCallCard.vue'
 import TokenUsagePanel from '@/components/chat/TokenUsagePanel.vue'
 
 interface ContentSegment {
-  type: 'text' | 'tool'
+  type: 'text' | 'thinking' | 'tool'
   text?: string
   toolIndex?: number
 }
 
 type ChatBubbleItem = BubbleListItemProps & {
+  role: 'user' | 'ai'
   isMarkdown?: boolean
   toolCalls?: ToolCall[]
   segments?: ContentSegment[]
@@ -96,6 +145,7 @@ type ChatBubbleItem = BubbleListItemProps & {
 
 const chatStore = useChatStore()
 const agentsStore = useAgentsStore()
+const toolsStore = useToolsStore()
 const { messages, isStreaming, interrupt } = storeToRefs(chatStore)
 
 const isLoading = computed(() => {
@@ -118,7 +168,7 @@ const bubbleList = computed((): ChatBubbleItem[] =>
       isMarkdown: msg.role !== 'user',
       toolCalls: msg.toolCalls,
       usage: msg.usage,
-      segments: msg.role === 'assistant' && msg.toolCalls?.length
+      segments: msg.role === 'assistant' && hasStructuredSegments(msg.content || '', msg.toolCalls)
         ? parseSegments(msg.content || '', msg.toolCalls)
         : undefined,
       loading:
@@ -131,6 +181,43 @@ const bubbleList = computed((): ChatBubbleItem[] =>
     })),
 )
 
+function getAssistantLabel(): string {
+  return agentsStore.currentAgent?.name || 'AI'
+}
+
+function getModelLabel(): string {
+  const model = toolsStore.currentModel || agentsStore.currentAgent?.default_model || ''
+  if (!model) return '模型未选择'
+  const parts = model.split('/')
+  return parts[parts.length - 1] || model
+}
+
+function hasStructuredSegments(content: string, toolCalls?: ToolCall[]): boolean {
+  return Boolean(
+    toolCalls?.length
+    || content.includes('<!--THINK_START-->')
+    || content.includes('<!--THINK_END-->'),
+  )
+}
+
+function getReasoningTokenTotal(usage?: MessageUsage): number {
+  return usage?.rounds.reduce((total, round) => total + (round.reasoningTokens || 0), 0) || 0
+}
+
+function hasThinkingSegment(segments?: ContentSegment[]): boolean {
+  return Boolean(segments?.some(seg => seg.type === 'thinking' && seg.text?.trim()))
+}
+
+function shouldShowReasoningNotice(item: ChatBubbleItem): boolean {
+  return item.role === 'ai'
+    && getReasoningTokenTotal(item.usage) > 0
+    && !hasThinkingSegment(item.segments)
+}
+
+function formatCompactTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
 
 function stripThinkingMarkers(content: string): string {
   return content.replace(/<!--(?:THINK_START|THINK_END)-->/g, '').trim()
@@ -138,14 +225,35 @@ function stripThinkingMarkers(content: string): string {
 
 function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[] {
   const segments: ContentSegment[] = []
-  const pattern = /<!--TOOL:(\d+)-->/g
+  const pattern = /<!--(?:TOOL:(\d+)|THINK_START|THINK_END)-->/g
   let lastIndex = 0
   let match: RegExpExecArray | null
+  let inThinking = false
 
   while ((match = pattern.exec(content)) !== null) {
     const textBefore = content.slice(lastIndex, match.index).trim()
+    const marker = match[0]
+
+    if (marker === '<!--THINK_START-->') {
+      if (textBefore) {
+        segments.push({ type: inThinking ? 'thinking' : 'text', text: stripThinkingMarkers(textBefore) })
+      }
+      inThinking = true
+      lastIndex = match.index + match[0].length
+      continue
+    }
+
+    if (marker === '<!--THINK_END-->') {
+      if (textBefore) {
+        segments.push({ type: 'thinking', text: stripThinkingMarkers(textBefore) })
+      }
+      inThinking = false
+      lastIndex = match.index + match[0].length
+      continue
+    }
+
     if (textBefore) {
-      segments.push({ type: 'text', text: stripThinkingMarkers(textBefore) })
+      segments.push({ type: inThinking ? 'thinking' : 'text', text: stripThinkingMarkers(textBefore) })
     }
     const toolIdx = parseInt(match[1], 10)
     if (toolCalls && toolIdx < toolCalls.length) {
@@ -156,14 +264,14 @@ function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[
 
   const remaining = content.slice(lastIndex).trim()
   if (remaining) {
-    segments.push({ type: 'text', text: stripThinkingMarkers(remaining) })
+    segments.push({ type: inThinking ? 'thinking' : 'text', text: stripThinkingMarkers(remaining) })
   }
 
   return segments
 }
 
 function handleSend(content: string) {
-  chatStore.sendMessage(content, agentsStore.currentAgentId)
+  chatStore.sendMessage(content, agentsStore.currentAgentId, toolsStore.currentModel)
 }
 
 function handleStop() {
@@ -276,9 +384,18 @@ onBeforeUnmount(() => {
 }
 
 .messages-container :deep(.elx-bubble--end) {
-  width: fit-content;
-  max-width: var(--chat-user-bubble-max-width) !important;
+  width: 100% !important;
+  max-width: 100% !important;
   align-self: flex-end;
+  justify-content: flex-end;
+}
+
+.messages-container :deep(.elx-bubble--end .elx-bubble__avatar) {
+  margin-top: 2px;
+}
+
+.messages-container :deep(.elx-bubble--end .elx-bubble__header) {
+  display: none;
 }
 
 .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
@@ -292,9 +409,81 @@ onBeforeUnmount(() => {
   max-width: 100% !important;
 }
 
+.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
+  width: fit-content;
+  max-width: var(--chat-user-bubble-max-width) !important;
+}
+
 .messages-container :deep(.elx-bubble__content) {
   max-width: none !important;
   min-width: 0;
+}
+
+.role-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-border-color);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.role-avatar.is-user {
+  color: #f7fee7;
+  background: linear-gradient(135deg, #2ea043, #1f7a3a);
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+.role-avatar.is-ai {
+  color: #d8f3dc;
+  background: linear-gradient(135deg, #15382a, #0b2119);
+  border-color: rgba(74, 222, 128, 0.32);
+}
+
+.role-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.role-header.is-ai {
+  min-height: 24px;
+}
+
+.role-header-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: #d8f3dc;
+  background: linear-gradient(135deg, #15382a, #0b2119);
+  border: 1px solid rgba(74, 222, 128, 0.32);
+}
+
+.role-name {
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.role-model {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--el-text-color-secondary);
+  background: color-mix(in srgb, var(--el-fill-color-light) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--el-border-color-lighter) 78%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
 }
 
 .bubble-content-wrap {
@@ -310,6 +499,81 @@ onBeforeUnmount(() => {
   pointer-events: auto !important;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.thinking-block {
+  margin: 8px 0 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(234, 179, 8, 0.22);
+  border-left: 3px solid rgba(234, 179, 8, 0.72);
+  background: rgba(234, 179, 8, 0.08);
+  overflow: hidden;
+}
+
+.thinking-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  cursor: pointer;
+  user-select: none;
+  color: #d69e2e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.thinking-summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-summary::after {
+  content: '展开';
+  margin-left: auto;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.thinking-block[open] .thinking-summary::after {
+  content: '收起';
+}
+
+.thinking-body {
+  padding: 0 12px 10px;
+  color: #c58f22;
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.thinking-unavailable {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 8px 0 10px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  color: var(--el-text-color-secondary);
+  background: color-mix(in srgb, var(--el-fill-color-light) 82%, var(--el-color-warning) 8%);
+  border: 1px dashed color-mix(in srgb, var(--el-color-warning) 36%, var(--el-border-color));
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.thinking-unavailable .el-icon {
+  color: var(--el-color-warning);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.thinking-unavailable-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thinking-unavailable-text strong {
+  color: var(--el-text-color-primary);
+  font-size: 12px;
 }
 
 .messages-container :deep([style*="pointer-events"]) .tool-call-inline,
@@ -363,16 +627,44 @@ onBeforeUnmount(() => {
 
 @media (max-width: 520px) {
   .messages-container {
-    --chat-user-bubble-max-width: 88%;
-    padding: 8px;
+    --chat-user-bubble-max-width: 86%;
+    padding: 6px 6px 8px 0;
   }
 
   .messages-container :deep(.elx-bubble) {
     max-width: 100% !important;
   }
 
+  .messages-container :deep(.elx-bubble--start .elx-bubble__avatar) {
+    display: none;
+  }
+
+  .messages-container :deep(.elx-bubble--start) {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .messages-container :deep(.elx-bubble--end) {
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-content: flex-end;
+  }
+
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
+    width: fit-content;
+    max-width: var(--chat-user-bubble-max-width) !important;
+  }
+
   .messages-container :deep(.elx-bubble__content) {
     padding: 8px 10px;
+  }
+
+  .role-header {
+    margin-left: 4px;
+  }
+
+  .role-header-icon {
+    display: inline-flex;
   }
 }
 </style>

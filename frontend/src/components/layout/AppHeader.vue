@@ -16,7 +16,7 @@
         class="agent-select"
         :model-value="agentsStore.currentAgentId"
         size="small"
-        @change="agentsStore.selectAgent"
+        @change="$emit('changeAgent', $event)"
       >
         <el-option
           v-for="agent in agentsStore.agents"
@@ -47,7 +47,9 @@
       />
       <span class="model-badge">{{ modelName }}</span>
       <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" />
-      <span class="status-text">{{ connected ? '已连接' : '未连接' }}</span>
+      <span class="status-text" :title="connected ? 'WebSocket 已连接' : '发送消息时自动连接'">
+        {{ connected ? '已连接' : '待连接' }}
+      </span>
       <el-button :icon="isDark ? Sunny : Moon" circle size="small" @click="toggleDark()" />
     </div>
   </header>
@@ -70,6 +72,7 @@ defineEmits<{
   editAgent: []
   newAgent: []
   newChat: []
+  changeAgent: [id: string]
   openMobileSidebar: []
   openMobileTools: []
 }>()

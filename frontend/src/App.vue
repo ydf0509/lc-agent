@@ -7,6 +7,7 @@
       @edit-agent="editCurrentAgent"
       @new-agent="createNewAgent"
       @new-chat="handleNewChat"
+      @change-agent="handleAgentChange"
       @open-mobile-sidebar="openMobileLeft"
       @open-mobile-tools="openMobileRight"
     />
@@ -70,7 +71,6 @@ const agentEditorRef = ref<InstanceType<typeof AgentEditorDialog>>()
 const sidebarCollapsed = ref(false)
 const mobileLeftOpen = ref(false)
 const mobileRightOpen = ref(false)
-let skipAgentWatch = false
 
 onMounted(async () => {
   await Promise.all([
@@ -79,14 +79,15 @@ onMounted(async () => {
     sessionsStore.init(),
   ])
 
-  const agentQuery = route.query.agent as string
-  if (agentQuery && agentsStore.agents.find(a => a.id === agentQuery)) {
-    agentsStore.selectAgent(agentQuery)
-  }
-
   const sessionId = route.params.sessionId as string
   if (sessionId) {
-    restoreSession(sessionId)
+    await restoreSession(sessionId)
+    return
+  }
+
+  const agentQuery = route.query.agent as string
+  if (agentQuery && agentsStore.agents.find(a => a.id === agentQuery)) {
+    await agentsStore.selectAgent(agentQuery)
   }
 })
 
@@ -97,32 +98,41 @@ watch(() => route.params.sessionId, (newId) => {
 })
 
 async function restoreSession(sessionId: string) {
-  if (chatStore.threadId === sessionId) return
+  if (chatStore.threadId === sessionId && chatStore.isConnected) return
   const session = sessionsStore.sessions.find(s => s.id === sessionId)
   if (session) {
     sessionsStore.selectSession(sessionId)
     if (session.agent_id && session.agent_id !== agentsStore.currentAgentId) {
-      skipAgentWatch = true
-      agentsStore.selectAgent(session.agent_id)
+      await agentsStore.selectAgent(session.agent_id)
+    }
+    if (session.model) {
+      toolsStore.setModel(session.model)
     }
     chatStore.clearMessages()
     chatStore.disconnect()
     await chatStore.loadMessages(sessionId)
-    chatStore.connect(sessionId)
+    await chatStore.connect(sessionId)
   }
 }
 
-function handleNewChat() {
-  const session = sessionsStore.createLocalSession(agentsStore.currentAgentId)
+async function handleNewChat() {
+  const session = sessionsStore.createLocalSession(agentsStore.currentAgentId, toolsStore.currentModel)
+  const sameRouteSession = route.params.sessionId === session.id
   chatStore.clearMessages()
   chatStore.disconnect()
-  router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: agentsStore.currentAgentId } })
+  await router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: agentsStore.currentAgentId } })
+  if (sameRouteSession) {
+    await restoreSession(session.id)
+  }
   closeMobileDrawers()
 }
 
 async function handleSwitchSession(sessionId: string) {
-  if (chatStore.threadId === sessionId) {
+  if (chatStore.threadId === sessionId && chatStore.isConnected) {
     const session = sessionsStore.sessions.find(s => s.id === sessionId)
+    if (session?.model) {
+      toolsStore.setModel(session.model)
+    }
     const agentId = session?.agent_id || agentsStore.currentAgentId
     router.push({ name: 'chat', params: { sessionId }, query: { agent: agentId } })
     closeMobileDrawers()
@@ -130,32 +140,33 @@ async function handleSwitchSession(sessionId: string) {
   }
   const session = sessionsStore.sessions.find(s => s.id === sessionId)
   sessionsStore.selectSession(sessionId)
+  if (session?.model) {
+    toolsStore.setModel(session.model)
+  }
   chatStore.clearMessages()
   chatStore.disconnect()
   await chatStore.loadMessages(sessionId)
-  chatStore.connect(sessionId)
+  await chatStore.connect(sessionId)
   const agentId = session?.agent_id || agentsStore.currentAgentId
   if (session?.agent_id && session.agent_id !== agentsStore.currentAgentId) {
-    skipAgentWatch = true
-    agentsStore.selectAgent(session.agent_id)
+    await agentsStore.selectAgent(session.agent_id)
   }
   router.push({ name: 'chat', params: { sessionId }, query: { agent: agentId } })
   closeMobileDrawers()
 }
 
-watch(() => agentsStore.currentAgentId, (newAgentId) => {
-  if (skipAgentWatch) {
-    skipAgentWatch = false
-    return
+async function handleAgentChange(agentId: string) {
+  await agentsStore.selectAgent(agentId)
+  const defaultModel = agentsStore.currentAgent?.default_model
+  if (defaultModel) {
+    toolsStore.setModel(defaultModel)
   }
-  if (route.name === 'home' || route.name === 'chat') {
-    const session = sessionsStore.createLocalSession(newAgentId)
-    chatStore.clearMessages()
-    chatStore.disconnect()
-    router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: newAgentId } })
-    closeMobileDrawers()
-  }
-})
+  const session = sessionsStore.createLocalSession(agentId, toolsStore.currentModel)
+  chatStore.clearMessages()
+  chatStore.disconnect()
+  await router.push({ name: 'chat', params: { sessionId: session.id }, query: { agent: agentId } })
+  closeMobileDrawers()
+}
 
 function editCurrentAgent() {
   agentEditorRef.value?.open(agentsStore.currentAgent)

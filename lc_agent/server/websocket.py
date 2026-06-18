@@ -43,6 +43,7 @@ class ChatWebSocketHandler:
         if msg_type == "message":
             content = data.get("content", "")
             preset_id = data.get("preset_id", "__chat__")
+            model_id = data.get("model", "")
             self._cancel_flags[thread_id] = False
             usage_rounds: list[dict] = []
             round_start_time = time.time()
@@ -63,7 +64,12 @@ class ChatWebSocketHandler:
 
             try:
                 await self._save_ui_message(thread_id, "user", content)
-                async for event in self.engine.chat_stream(content, thread_id, preset_id):
+                stream = (
+                    self.engine.chat_stream(content, thread_id, preset_id, model_id=model_id)
+                    if model_id
+                    else self.engine.chat_stream(content, thread_id, preset_id)
+                )
+                async for event in stream:
                     if self._cancel_flags.get(thread_id):
                         await websocket.send_json({"type": "cancelled"})
                         return
@@ -104,7 +110,7 @@ class ChatWebSocketHandler:
                 self._message_counts[thread_id] = self._message_counts.get(thread_id, 0) + 1
                 if self._message_counts[thread_id] == 1:
                     asyncio.create_task(
-                        self._generate_and_push_title(websocket, thread_id, content, preset_id)
+                        self._generate_and_push_title(websocket, thread_id, content, preset_id, model_id)
                     )
             except Exception as e:
                 await websocket.send_json({"type": "error", "message": str(e)})
@@ -151,19 +157,26 @@ class ChatWebSocketHandler:
         except Exception:
             pass
 
-    async def _generate_and_push_title(self, websocket: WebSocket, thread_id: str, first_message: str, preset_id: str = "__chat__"):
+    async def _generate_and_push_title(
+        self,
+        websocket: WebSocket,
+        thread_id: str,
+        first_message: str,
+        preset_id: str = "__chat__",
+        selected_model_id: str = "",
+    ):
         """Generate title from first message using the agent's model, save to DB, and push to client."""
         try:
-            model_id = ""
+            model_id = selected_model_id
             if preset_id in self.engine.BUILTIN_IDS:
                 for bp in self.engine.get_builtin_presets():
                     if bp.id == preset_id:
-                        model_id = bp.default_model
+                        model_id = model_id or bp.default_model
                         break
             else:
                 preset = self.engine._presets.get(preset_id) or self.engine._custom_presets.get(preset_id)
                 if preset:
-                    model_id = preset.default_model
+                    model_id = model_id or preset.default_model
             title = await self.engine.generate_title(first_message, model_id)
 
             from lc_agent.db.engine import get_async_session

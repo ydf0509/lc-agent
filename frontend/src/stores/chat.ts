@@ -138,6 +138,24 @@ function normalizeHistoryMessages(rawMessages: any[]): ChatMessage[] {
   return loaded
 }
 
+function mergeFinalUsageRounds(targetRounds: LlmRoundUsage[], rawRounds: any[]) {
+  rawRounds.forEach((round: any, idx: number) => {
+    const normalized = {
+      inputTokens: round.input_tokens || 0,
+      outputTokens: round.output_tokens || 0,
+      totalTokens: round.total_tokens || 0,
+      cacheReadTokens: round.cache_read_tokens || 0,
+      reasoningTokens: round.reasoning_tokens || 0,
+      duration: round.duration_ms || undefined,
+    }
+    if (targetRounds[idx]) {
+      Object.assign(targetRounds[idx], normalized)
+    } else {
+      targetRounds.push(normalized)
+    }
+  })
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const isStreaming = ref(false)
@@ -212,7 +230,7 @@ export const useChatStore = defineStore('chat', () => {
           outputTokens: msg.output_tokens || 0,
           totalTokens: msg.total_tokens || 0,
           cacheReadTokens: msg.cache_read_tokens || 0,
-          reasoningTokens: 0,
+          reasoningTokens: msg.reasoning_tokens || 0,
           duration: roundDuration,
         })
         currentRoundStart = Date.now()
@@ -287,23 +305,22 @@ export const useChatStore = defineStore('chat', () => {
         }
         const usageData = (msg as any).usage as any[] | undefined
         if (usageData && usageData.length > 0 && last.usage) {
-          if (last.usage.rounds.length === 0) {
-            const newRounds = usageData.map((r: any) => ({
-              inputTokens: r.input_tokens || 0,
-              outputTokens: r.output_tokens || 0,
-              totalTokens: r.total_tokens || 0,
-              cacheReadTokens: r.cache_read_tokens || 0,
-              reasoningTokens: r.reasoning_tokens || 0,
-              duration: r.duration_ms || undefined,
-            }))
-            last.usage.rounds.splice(0, last.usage.rounds.length, ...newRounds)
-          }
+          mergeFinalUsageRounds(last.usage.rounds, usageData)
         }
       }
     })
 
     ws.value.on('cancelled', () => {
       isStreaming.value = false
+      const last = messages.value[messages.value.length - 1]
+      if (last) last.isStreaming = false
+    })
+
+    ws.value.on('disconnected', () => {
+      if (ws.value?.connected) return
+      isConnected.value = false
+      isStreaming.value = false
+      threadId.value = null
       const last = messages.value[messages.value.length - 1]
       if (last) last.isStreaming = false
     })
@@ -335,14 +352,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function sendMessage(content: string, presetId: string = '__chat__') {
+  async function sendMessage(content: string, presetId: string = '__chat__', modelId: string = '') {
     if (!content.trim()) return
 
     const sessionsStore = useSessionsStore()
     const sessionId = sessionsStore.currentSessionId
     if (sessionId && sessionsStore.isLocalSession(sessionId)) {
       const isFirstMessage = sessionsStore.currentSession?.message_count === 0
-      const realId = await sessionsStore.persistSession(sessionId)
+      const realId = await sessionsStore.persistSession(sessionId, modelId)
       // Always reconnect with the persisted session ID
       ws.value?.disconnect()
       await connect(realId)
@@ -367,6 +384,7 @@ export const useChatStore = defineStore('chat', () => {
       type: 'message',
       content: content.trim(),
       preset_id: presetId,
+      model: modelId,
     })
   }
 
@@ -399,6 +417,8 @@ export const useChatStore = defineStore('chat', () => {
   function disconnect() {
     ws.value?.disconnect()
     isConnected.value = false
+    isStreaming.value = false
+    threadId.value = null
   }
 
   return {

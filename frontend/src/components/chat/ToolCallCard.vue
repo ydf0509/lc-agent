@@ -8,6 +8,10 @@
       <el-icon v-else-if="toolCall.status === 'done'" style="color: var(--el-color-success)">
         <Check />
       </el-icon>
+      <span class="tool-kind">
+        <el-icon><Tools /></el-icon>
+        工具调用
+      </span>
       <span class="tool-name">{{ toolCall.name }}</span>
       <el-tag size="small" :type="statusType">{{ statusLabel }}</el-tag>
       <span class="tool-meta" v-if="toolCall.status === 'done'">
@@ -49,18 +53,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Loading, Check } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { Loading, Check, Tools } from '@element-plus/icons-vue'
 import type { ToolCall } from '@/stores/chat'
 
 const props = defineProps<{ toolCall: ToolCall; collapsed?: boolean }>()
 const showModal = ref(false)
 const renderMode = ref(false)
 const isCollapsed = ref(props.collapsed ?? false)
+const userToggled = ref(false)
 
 function toggleCollapse() {
+  userToggled.value = true
   isCollapsed.value = !isCollapsed.value
 }
+
+watch(() => props.collapsed, (collapsed) => {
+  if (userToggled.value || collapsed === undefined) return
+  isCollapsed.value = collapsed
+}, { immediate: true })
 
 const isLong = computed(() => (props.toolCall.result?.length || 0) > 300)
 
@@ -139,6 +150,7 @@ const statusLabel = computed(() => {
 .tool-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   cursor: pointer;
   user-select: none;
@@ -160,10 +172,29 @@ const statusLabel = computed(() => {
 }
 
 .tool-name {
+  flex: 1 1 180px;
+  min-width: 0;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
   color: var(--el-color-primary);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .tool-meta {
@@ -171,6 +202,7 @@ const statusLabel = computed(() => {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .meta-item {
@@ -354,5 +386,31 @@ const statusLabel = computed(() => {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 520px) {
+  .tool-call-card {
+    padding: 9px 10px;
+  }
+
+  .is-collapsed {
+    padding: 7px 10px;
+  }
+
+  .tool-header {
+    gap: 6px;
+  }
+
+  .tool-name {
+    flex-basis: 100%;
+    order: 10;
+    padding-left: 24px;
+    max-width: 100%;
+  }
+
+  .tool-meta {
+    margin-left: 0;
+    gap: 7px;
+  }
 }
 </style>

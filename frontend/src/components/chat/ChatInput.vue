@@ -3,7 +3,7 @@
     <XSender
       ref="senderRef"
       :loading="isStreaming"
-      :disabled="!isConnected"
+      :disabled="isInputDisabled"
       placeholder="Send a message..."
       submit-type="enter"
       clearable
@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { XSender } from 'vue-element-plus-x'
 import { useChatStore } from '@/stores/chat'
@@ -31,8 +31,9 @@ const emit = defineEmits<{
 }>()
 
 const chatStore = useChatStore()
-const { isStreaming, isConnected } = storeToRefs(chatStore)
+const { isStreaming } = storeToRefs(chatStore)
 const senderRef = ref<InstanceType<typeof XSender>>()
+const isInputDisabled = computed(() => isStreaming.value)
 
 function handleSubmit() {
   const model = senderRef.value?.getModelValue()

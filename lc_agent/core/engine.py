@@ -87,7 +87,7 @@ class AgentEngine:
         """Return the default agent (Chat - safest)."""
         return self.get_builtin_presets()[0]
 
-    def build_agent(self, preset: AgentPreset | None = None):
+    def build_agent(self, preset: AgentPreset | None = None, cache_key: str | None = None):
         """Build a LangGraph ReAct agent from preset."""
         if preset is None:
             preset = self.get_default_preset()
@@ -127,7 +127,7 @@ class AgentEngine:
             **kwargs,
         )
 
-        self._agents[preset.id] = agent
+        self._agents[cache_key or preset.id] = agent
         return agent
 
     def _create_llm(self, model_info: ModelInfo | None, model_id: str):
@@ -179,21 +179,33 @@ class AgentEngine:
             return self._presets[preset_id]
         return self.get_default_preset()
 
-    def _get_or_build_agent(self, preset_id: str):
-        """Get cached agent or build a new one. Rebuilds if MCP state changed."""
+    def _get_agent_cache_key(self, preset_id: str, model_id: str = "") -> str:
+        if model_id:
+            return f"{preset_id}::model::{model_id}"
+        return preset_id
+
+    def _resolve_preset_for_model(self, preset_id: str, model_id: str = "") -> AgentPreset:
         preset = self._resolve_preset(preset_id)
+        if model_id and self._find_model(model_id):
+            return preset.model_copy(update={"default_model": model_id})
+        return preset
+
+    def _get_or_build_agent(self, preset_id: str, model_id: str = ""):
+        """Get cached agent or build a new one. Rebuilds if MCP state changed."""
+        preset = self._resolve_preset_for_model(preset_id, model_id)
+        cache_key = self._get_agent_cache_key(preset_id, model_id if preset.default_model == model_id else "")
         mcp_gen = getattr(self, '_mcp_generation', 0)
-        cached = self._agents.get(preset_id)
-        cached_gen = self._agent_mcp_gen.get(preset_id, -1)
+        cached = self._agents.get(cache_key)
+        cached_gen = self._agent_mcp_gen.get(cache_key, -1)
         if cached is None or cached_gen != mcp_gen:
-            agent = self.build_agent(preset)
-            self._agent_mcp_gen[preset_id] = mcp_gen
+            agent = self.build_agent(preset, cache_key=cache_key)
+            self._agent_mcp_gen[cache_key] = mcp_gen
             return agent
         return cached
 
-    async def chat(self, message: str, thread_id: str, preset_id: str = "__chat__") -> str:
+    async def chat(self, message: str, thread_id: str, preset_id: str = "__chat__", model_id: str = "") -> str:
         """Send a message and get a response (non-streaming)."""
-        agent = self._get_or_build_agent(preset_id)
+        agent = self._get_or_build_agent(preset_id, model_id)
 
         config = {"configurable": {"thread_id": thread_id}}
         result = await agent.ainvoke(
@@ -205,9 +217,15 @@ class AgentEngine:
             return messages[-1].content
         return ""
 
-    async def chat_stream(self, message: str, thread_id: str, preset_id: str = "__chat__") -> AsyncIterator[dict]:
+    async def chat_stream(
+        self,
+        message: str,
+        thread_id: str,
+        preset_id: str = "__chat__",
+        model_id: str = "",
+    ) -> AsyncIterator[dict]:
         """Stream chat responses as events."""
-        agent = self._get_or_build_agent(preset_id)
+        agent = self._get_or_build_agent(preset_id, model_id)
 
         config = {"configurable": {"thread_id": thread_id}}
         async for event in agent.astream_events(

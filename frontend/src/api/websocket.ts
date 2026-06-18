@@ -14,6 +14,7 @@ export interface WsMessage {
   output_tokens?: number
   total_tokens?: number
   cache_read_tokens?: number
+  reasoning_tokens?: number
   usage?: any[]
 }
 
@@ -70,8 +71,8 @@ export class ChatWebSocket {
     }
   }
 
-  sendMessage(content: string) {
-    this.send({ type: 'message', content })
+  sendMessage(content: string, presetId?: string, model?: string) {
+    this.send({ type: 'message', content, preset_id: presetId, model })
   }
 
   sendInterruptResponse(approved: boolean, presetId: string) {

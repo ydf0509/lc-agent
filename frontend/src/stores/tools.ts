@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch, reactive } from 'vue'
 import { api } from '@/api/http'
 import { useAgentsStore } from '@/stores/agents'
+import { useSessionsStore } from '@/stores/sessions'
 
 export interface ToolGroup {
   id: string
@@ -148,6 +149,13 @@ export const useToolsStore = defineStore('tools', () => {
 
   function setModel(modelId: string) {
     currentModel.value = modelId
+    const sessionsStore = useSessionsStore()
+    const sessionId = sessionsStore.currentSessionId
+    if (sessionId) {
+      sessionsStore.updateModel(sessionId, modelId).catch((e) => {
+        console.error('[ToolsStore] Failed to update session model:', e)
+      })
+    }
   }
 
   return {

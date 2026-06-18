@@ -72,6 +72,45 @@ class TestAgentEngine:
         assert preset.system_prompt == "You are a helpful assistant. Respond in the user's language."
         assert preset.default_model == "test-model"
 
+    def test_model_override_uses_separate_agent_cache_key(self, sample_config, monkeypatch):
+        from lc_agent.core.engine import AgentEngine
+
+        config = {
+            **sample_config,
+            "provider": {
+                "default": {
+                    "api_key": "test-key",
+                    "base_url": "https://api.example.com/v1",
+                    "models": [
+                        {"id": "test-model", "context_limit": 8000},
+                        {"id": "ark-deepseek-v4-flash", "context_limit": 200000},
+                    ],
+                }
+            },
+        }
+        engine = AgentEngine(config)
+        built: list[tuple[str, str | None]] = []
+
+        def fake_build_agent(preset, cache_key=None):
+            built.append((preset.default_model, cache_key))
+            agent = object()
+            engine._agents[cache_key or preset.id] = agent
+            return agent
+
+        monkeypatch.setattr(engine, "build_agent", fake_build_agent)
+
+        agent_a = engine._get_or_build_agent("__chat__", model_id="ark-deepseek-v4-flash")
+        agent_b = engine._get_or_build_agent("__chat__", model_id="ark-deepseek-v4-flash")
+        agent_c = engine._get_or_build_agent("__chat__")
+
+        assert agent_a is agent_b
+        assert agent_a is not agent_c
+        assert built == [
+            ("ark-deepseek-v4-flash", "__chat__::model::ark-deepseek-v4-flash"),
+            ("test-model", "__chat__"),
+        ]
+        assert engine.get_default_preset().default_model == "test-model"
+
 
 class TestCreateLlm:
     """Test _create_llm method with ChatOpenAIReasoning and init_chat_model."""

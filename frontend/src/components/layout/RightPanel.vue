@@ -74,8 +74,8 @@
       <h4>状态</h4>
       <div class="status-item">
         <span>连接:</span>
-        <el-tag :type="chatStore.isConnected ? 'success' : 'danger'" size="small">
-          {{ chatStore.isConnected ? '已连接' : '未连接' }}
+        <el-tag :type="chatStore.isConnected ? 'success' : 'warning'" size="small">
+          {{ chatStore.isConnected ? '已连接' : '待连接' }}
         </el-tag>
       </div>
       <div v-if="chatStore.threadId" class="status-item">
