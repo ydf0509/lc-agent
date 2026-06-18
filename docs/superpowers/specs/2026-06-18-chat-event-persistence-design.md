@@ -32,7 +32,7 @@
 - `id`：消息记录 ID。
 - `session_id`：所属会话。
 - `role`：`user`、`assistant` 或其他可展示角色。
-- `content`：最终 Markdown 文本。
+- `content`：最终展示用 Markdown 文本，保留实时渲染时插入的 `<!--TOOL:n-->` 工具占位符。
 - `tool_calls`：assistant 消息的工具调用和结果数组。
 - `usage`：assistant 消息的 Token 统计和耗时。
 - `created_at`：创建时间。
@@ -85,7 +85,7 @@
 3. 收到 `tool_call` 事件时，把工具名称、run id 和参数追加到本轮 assistant 的 `tool_calls`。
 4. 收到 `tool_result` 事件时，按 `run_id` 回填对应工具调用的结果、状态和耗时。
 5. 收到 `llm_usage` 事件时，把本轮模型调用统计追加到 `usage.rounds`。
-6. 生成完成后，保存一条 `assistant` UI 消息，包含最终 Markdown 文本、完整 `tool_calls` 和 `usage`。
+6. 生成完成后，保存一条 `assistant` UI 消息，包含最终展示内容、完整 `tool_calls` 和 `usage`。展示内容保留工具占位符，用来恢复工具卡片在回答中的原始位置。
 
 如果生成失败，已保存的用户消息保留；assistant 消息只在有最终内容或可展示错误时保存。失败事件仍通过 WebSocket 返回给前端。
 
@@ -103,7 +103,7 @@
 
 ## 前端流程
 
-实时 WebSocket 渲染逻辑继续保留。历史加载时，`chat.ts` 把后端返回的 `tool_calls` 转成 `toolCalls`，把 `usage` 转成 `usage`，并在 assistant 内容中按工具顺序插入 `<!--TOOL:n-->` 占位符。
+实时 WebSocket 渲染逻辑继续保留。历史加载时，`chat.ts` 把后端返回的 `tool_calls` 转成 `toolCalls`，把 `usage` 转成 `usage`。如果 assistant 内容里已经带有 `<!--TOOL:n-->` 占位符，则直接使用；如果缺少占位符，再按工具顺序兜底插入。
 
 这样 `ChatView.vue` 现有的 `parseSegments(content, toolCalls)` 可以继续工作，历史消息和实时消息走相同渲染路径。
 
