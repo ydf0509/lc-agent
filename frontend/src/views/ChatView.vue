@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
@@ -174,9 +174,69 @@ function handleInterruptDecide(decision: { type: string }) {
   chatStore.respondToInterrupt(decision.type === 'approve', agentsStore.currentAgentId)
 }
 
+function getCodeToCopy(button: HTMLButtonElement): string {
+  const encoded = button.dataset.code
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded)
+    } catch {
+      return encoded
+    }
+  }
+  return button.closest('.markdown-code-block')?.querySelector('code')?.textContent ?? ''
+}
+
+function fallbackCopy(text: string) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
+
+async function copyMarkdownCode(button: HTMLButtonElement) {
+  const text = getCodeToCopy(button)
+  if (!text) return
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+  } else {
+    fallbackCopy(text)
+  }
+
+  const previousText = button.textContent || '复制'
+  button.textContent = '已复制'
+  button.classList.add('copied')
+  window.setTimeout(() => {
+    button.textContent = previousText
+    button.classList.remove('copied')
+  }, 1400)
+}
+
+function handleMarkdownClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const button = target?.closest?.('.markdown-code-copy') as HTMLButtonElement | null
+  if (!button) return
+  event.preventDefault()
+  copyMarkdownCode(button).catch(() => {
+    button.textContent = '复制失败'
+    window.setTimeout(() => {
+      button.textContent = '复制'
+    }, 1400)
+  })
+}
 
 onMounted(() => {
   chatStore.connect()
+  document.addEventListener('click', handleMarkdownClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleMarkdownClick)
 })
 </script>
 
@@ -237,6 +297,7 @@ onMounted(() => {
   max-width: 100%;
 }
 
+.messages-container :deep(.markdown-code-block),
 .messages-container :deep(.markdown-body pre),
 .messages-container :deep(.markdown-body table),
 .messages-container :deep(.tool-call-card) {
@@ -246,10 +307,6 @@ onMounted(() => {
 
 .messages-container :deep(.markdown-body code) {
   overflow-wrap: anywhere;
-}
-
-.messages-container :deep(.markdown-body pre.hljs) {
-  background: var(--el-fill-color-darker, var(--el-bg-color));
 }
 
 .messages-container :deep(.elx-welcome) {
