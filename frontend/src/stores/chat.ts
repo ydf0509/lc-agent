@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { ChatWebSocket, type WsMessage } from '@/api/websocket'
 import { useSessionsStore } from '@/stores/sessions'
 import { api } from '@/api/http'
+import { createClientId } from '@/utils/client-id'
 
 export interface LlmRoundUsage {
   inputTokens: number
@@ -116,7 +117,7 @@ function normalizeHistoryMessage(msg: any): ChatMessage | null {
   }
 
   return {
-    id: msg.id || crypto.randomUUID(),
+    id: msg.id || createClientId(),
     role,
     content: role === 'assistant' ? ensureToolMarkers(msg.content || '', toolCalls) : msg.content || '',
     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
@@ -189,7 +190,7 @@ export const useChatStore = defineStore('chat', () => {
         streamStartTime = Date.now()
         currentRoundStart = Date.now()
         messages.value.push({
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: 'assistant',
           content: '',
           timestamp: Date.now(),
@@ -213,7 +214,7 @@ export const useChatStore = defineStore('chat', () => {
         streamStartTime = Date.now()
         currentRoundStart = Date.now()
         messages.value.push({
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: 'assistant',
           content: '',
           timestamp: Date.now(),
@@ -254,7 +255,7 @@ export const useChatStore = defineStore('chat', () => {
         streamStartTime = Date.now()
         currentRoundStart = Date.now()
         messages.value.push({
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: 'assistant',
           content: '',
           timestamp: Date.now(),
@@ -389,7 +390,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!ws.value) return
 
     messages.value.push({
-      id: crypto.randomUUID(),
+      id: createClientId(),
       role: 'user',
       content: content.trim(),
       timestamp: Date.now(),

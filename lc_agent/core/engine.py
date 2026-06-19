@@ -184,6 +184,18 @@ class AgentEngine:
             return f"{preset_id}::model::{model_id}"
         return preset_id
 
+    def invalidate_agent_cache(self, preset_id: str, keep_exact: bool = False) -> None:
+        """Remove cached agents for a preset, including model override variants."""
+        prefix = f"{preset_id}::model::"
+        keys = [
+            key
+            for key in self._agents
+            if key.startswith(prefix) or (key == preset_id and not keep_exact)
+        ]
+        for key in keys:
+            self._agents.pop(key, None)
+            self._agent_mcp_gen.pop(key, None)
+
     def _resolve_preset_for_model(self, preset_id: str, model_id: str = "") -> AgentPreset:
         preset = self._resolve_preset(preset_id)
         if model_id and self._find_model(model_id):

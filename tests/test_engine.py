@@ -111,6 +111,28 @@ class TestAgentEngine:
         ]
         assert engine.get_default_preset().default_model == "test-model"
 
+    def test_invalidate_agent_cache_removes_model_variants(self, sample_config):
+        from lc_agent.core.engine import AgentEngine
+
+        engine = AgentEngine(sample_config)
+        engine._agents["agent-a"] = object()
+        engine._agents["agent-a::model::m1"] = object()
+        engine._agents["agent-a::model::m2"] = object()
+        engine._agents["agent-b"] = object()
+        engine._agent_mcp_gen["agent-a"] = 0
+        engine._agent_mcp_gen["agent-a::model::m1"] = 0
+        engine._agent_mcp_gen["agent-b"] = 0
+
+        engine.invalidate_agent_cache("agent-a")
+
+        assert "agent-a" not in engine._agents
+        assert "agent-a::model::m1" not in engine._agents
+        assert "agent-a::model::m2" not in engine._agents
+        assert "agent-b" in engine._agents
+        assert "agent-a" not in engine._agent_mcp_gen
+        assert "agent-a::model::m1" not in engine._agent_mcp_gen
+        assert "agent-b" in engine._agent_mcp_gen
+
     @pytest.mark.asyncio
     async def test_chat_stream_accepts_replay_history(self, sample_config, monkeypatch):
         from lc_agent.core.engine import AgentEngine

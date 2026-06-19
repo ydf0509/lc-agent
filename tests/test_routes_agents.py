@@ -2,18 +2,22 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from lc_agent.app import LcAgentApp
+from lc_agent.db.engine import init_db, reset_engine
 from lc_agent.tools.registry import ToolRegistry
 
 
 @pytest.fixture(autouse=True)
-def reset_registry():
+async def setup():
     ToolRegistry._global_tools = {}
     ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
+    reset_engine()
+    await init_db("sqlite+aiosqlite:///:memory:")
     yield
     ToolRegistry._global_tools = {}
     ToolRegistry._group_descriptions = {}
     ToolRegistry._instance = None
+    reset_engine()
 
 
 @pytest.fixture
@@ -74,6 +78,52 @@ async def test_update_agent(app):
         assert update_resp.status_code == 200
         assert update_resp.json()["name"] == "Updated Agent"
         assert update_resp.json()["system_prompt"] == "Updated prompt"
+
+
+@pytest.mark.asyncio
+async def test_update_agent_invalidates_model_variant_cache(app):
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/agents", json={
+            "name": "Cache Agent",
+            "system_prompt": "Old prompt",
+            "default_model": "gpt-4",
+        })
+        agent_id = create_resp.json()["id"]
+
+        app.engine._agents[agent_id] = object()
+        app.engine._agents[f"{agent_id}::model::gpt-4"] = object()
+        app.engine._agent_mcp_gen[agent_id] = app.engine._mcp_generation
+        app.engine._agent_mcp_gen[f"{agent_id}::model::gpt-4"] = app.engine._mcp_generation
+
+        update_resp = await client.put(f"/api/agents/{agent_id}", json={
+            "system_prompt": "New prompt",
+        })
+
+    assert update_resp.status_code == 200
+    assert agent_id not in app.engine._agents
+    assert f"{agent_id}::model::gpt-4" not in app.engine._agents
+    assert agent_id not in app.engine._agent_mcp_gen
+    assert f"{agent_id}::model::gpt-4" not in app.engine._agent_mcp_gen
+
+
+@pytest.mark.asyncio
+async def test_update_code_agent_invalidates_model_variant_cache(app):
+    graph = object()
+    app.add_agent("code_agent_cache", graph)
+    app.engine._agents["code_agent_cache::model::gpt-4"] = object()
+    app.engine._agent_mcp_gen["code_agent_cache::model::gpt-4"] = app.engine._mcp_generation
+
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.put("/api/agents/code_agent_cache", json={
+            "allowed_skills": [],
+        })
+
+    assert resp.status_code == 200
+    assert "code_agent_cache::model::gpt-4" not in app.engine._agents
+    assert "code_agent_cache::model::gpt-4" not in app.engine._agent_mcp_gen
+    assert app.engine._agents["code_agent_cache"] is graph
 
 
 @pytest.mark.asyncio

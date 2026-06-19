@@ -70,6 +70,8 @@ function handleCancelEdit() {
   background: var(--el-bg-color);
   box-sizing: border-box;
   flex-shrink: 0;
+  position: relative;
+  z-index: 120;
   width: 100%;
 }
 

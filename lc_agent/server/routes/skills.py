@@ -36,6 +36,9 @@ def toggle_skill(name: str, request: Request):
     else:
         scanner._disabled_skills.add(name)
         enabled = False
+    engine = getattr(request.app.state, "engine", None)
+    if engine:
+        engine._mcp_generation += 1
     return {"name": name, "enabled": enabled}
 
 

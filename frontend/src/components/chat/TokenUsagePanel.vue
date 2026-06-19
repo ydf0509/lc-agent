@@ -1,10 +1,10 @@
 <template>
   <div v-if="usage && (usage.rounds.length > 0 || usage.toolCallCount > 0 || usage.totalDuration)" class="token-usage-panel">
-    <div class="usage-header" @click.stop="expanded = !expanded">
+    <div class="usage-header" @click.stop="toggleRoundsDetails">
       <span class="usage-title">Token 用量</span>
       <div class="usage-badges">
-        <span class="badge badge-rounds">🔄 {{ usage.rounds.length }} Rounds</span>
-        <span v-if="usage.toolCallCount" class="badge badge-tools" @click.stop="toolsExpanded = !toolsExpanded">🔧 {{ usage.toolCallCount }} 工具</span>
+        <span class="badge badge-rounds" @click.stop="toggleRoundsDetails">🔄 {{ usage.rounds.length }} Rounds</span>
+        <span v-if="usage.toolCallCount" class="badge badge-tools" @click.stop="toggleToolsDetails">🔧 {{ usage.toolCallCount }} 工具</span>
         <span v-if="usage.totalDuration" class="badge badge-time">⏱ {{ formatDuration(usage.totalDuration) }}</span>
       </div>
     </div>
@@ -34,9 +34,10 @@
       <span v-if="usage.toolCallCount" class="minimal-info">· {{ usage.toolCallCount }} 次工具调用</span>
     </div>
 
-    <div v-if="expanded && usage.rounds.length > 1" class="usage-details">
+    <Transition name="usage-details">
+    <div v-if="expanded && usage.rounds.length > 1" ref="usageDetailsRef" class="usage-details">
       <div class="details-header">
-        <span class="detail-toggle" @click="expanded = !expanded">▾ Per-round Details</span>
+        <span class="detail-toggle" @click="toggleRoundsDetails">▾ Per-round Details</span>
         <span class="rounds-badge">{{ usage.rounds.length }} Rounds</span>
       </div>
       <table class="details-table">
@@ -70,10 +71,12 @@
         </tbody>
       </table>
     </div>
+    </Transition>
 
-    <div v-if="toolsExpanded && toolCalls && toolCalls.length > 0" class="tools-details">
+    <Transition name="usage-details">
+    <div v-if="toolsExpanded && toolCalls && toolCalls.length > 0" ref="toolsDetailsRef" class="tools-details">
       <div class="details-header">
-        <span class="detail-toggle" @click="toolsExpanded = false">▾ Tool Calls</span>
+        <span class="detail-toggle" @click="toggleToolsDetails">▾ Tool Calls</span>
         <span class="tools-badge">{{ toolCalls.length }} 工具</span>
       </div>
       <table class="details-table">
@@ -97,11 +100,12 @@
         </tbody>
       </table>
     </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import type { MessageUsage, ToolCall } from '@/stores/chat'
 
 const props = defineProps<{
@@ -110,6 +114,8 @@ const props = defineProps<{
 }>()
 const expanded = ref(false)
 const toolsExpanded = ref(false)
+const usageDetailsRef = ref<HTMLElement>()
+const toolsDetailsRef = ref<HTMLElement>()
 
 const totalInput = computed(() =>
   props.usage?.rounds.reduce((s, r) => s + r.inputTokens, 0) || 0
@@ -148,6 +154,25 @@ function statusLabel(status: string): string {
     case 'running': return '执行中'
     case 'error': return '错误'
     default: return '等待'
+  }
+}
+
+async function scrollDetailsIntoView(target: typeof usageDetailsRef) {
+  await nextTick()
+  target.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+}
+
+function toggleRoundsDetails() {
+  expanded.value = !expanded.value
+  if (expanded.value) {
+    scrollDetailsIntoView(usageDetailsRef)
+  }
+}
+
+function toggleToolsDetails() {
+  toolsExpanded.value = !toolsExpanded.value
+  if (toolsExpanded.value) {
+    scrollDetailsIntoView(toolsDetailsRef)
   }
 }
 </script>
@@ -259,6 +284,27 @@ function statusLabel(status: string): string {
   margin-top: 12px;
   border-top: 1px solid var(--el-border-color);
   padding-top: 10px;
+  scroll-margin: 72px 0 96px;
+}
+
+.usage-details-enter-active,
+.usage-details-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.22s ease;
+  overflow: hidden;
+}
+
+.usage-details-enter-from,
+.usage-details-leave-to {
+  opacity: 0;
+  max-height: 0;
+  transform: translateY(-6px);
+}
+
+.usage-details-enter-to,
+.usage-details-leave-from {
+  opacity: 1;
+  max-height: 420px;
+  transform: translateY(0);
 }
 
 .details-header {
@@ -352,6 +398,7 @@ function statusLabel(status: string): string {
   margin-top: 12px;
   border-top: 1px solid var(--el-border-color);
   padding-top: 10px;
+  scroll-margin: 72px 0 96px;
 }
 
 .tools-badge {

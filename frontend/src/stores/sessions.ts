@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api/http'
 import { useAgentsStore } from '@/stores/agents'
+import { createClientId } from '@/utils/client-id'
 
 export interface Session {
   id: string
@@ -43,7 +44,7 @@ export const useSessionsStore = defineStore('sessions', () => {
       return existing
     }
 
-    const id = crypto.randomUUID()
+    const id = createClientId()
     const session: Session = {
       id,
       title: '新对话',

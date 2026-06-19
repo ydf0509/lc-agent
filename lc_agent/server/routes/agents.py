@@ -141,6 +141,7 @@ async def update_agent(agent_id: str, body: AgentUpdateRequest, engine: AgentEng
         existing = engine._custom_presets[agent_id]
         updated = existing.model_copy(update=update_data)
         engine._custom_presets[agent_id] = updated
+        engine.invalidate_agent_cache(agent_id, keep_exact=True)
         return {**updated.model_dump(), "source": "code"}
 
     stmt = select(AgentPresetDB).where(AgentPresetDB.id == agent_id)
@@ -166,9 +167,7 @@ async def update_agent(agent_id: str, body: AgentUpdateRequest, engine: AgentEng
         dangerous_tools=preset_db.dangerous_tools,
     )
     engine._presets[preset.id] = preset
-
-    if agent_id in engine._agents:
-        del engine._agents[agent_id]
+    engine.invalidate_agent_cache(agent_id)
 
     return {**preset.model_dump(), "source": "user"}
 
@@ -191,7 +190,7 @@ async def delete_agent(agent_id: str, engine: AgentEngine = Depends(get_engine),
     await db.commit()
 
     engine._presets.pop(agent_id, None)
-    engine._agents.pop(agent_id, None)
+    engine.invalidate_agent_cache(agent_id)
 
     return Response(status_code=204)
 

@@ -27,6 +27,7 @@
     >
       <LeftSidebar
         class="mobile-left-panel"
+        :class="{ 'is-mobile-open': mobileLeftOpen }"
         :collapsed="mobileLeftOpen ? false : sidebarCollapsed"
         @new-chat="handleNewChat"
         @switch-session="handleSwitchSession"
@@ -37,7 +38,10 @@
         <router-view />
       </main>
 
-      <RightPanel class="mobile-right-panel" />
+      <RightPanel
+        class="mobile-right-panel"
+        :class="{ 'is-mobile-open': mobileRightOpen }"
+      />
     </div>
 
     <AgentEditorDialog ref="agentEditorRef" />
@@ -177,12 +181,12 @@ function createNewAgent() {
 }
 
 function openMobileLeft() {
-  mobileLeftOpen.value = true
+  mobileLeftOpen.value = !mobileLeftOpen.value
   mobileRightOpen.value = false
 }
 
 function openMobileRight() {
-  mobileRightOpen.value = true
+  mobileRightOpen.value = !mobileRightOpen.value
   mobileLeftOpen.value = false
 }
 
@@ -196,15 +200,17 @@ function closeMobileDrawers() {
 .app-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
   background: var(--el-bg-color-page);
-  position: relative;
   overflow: hidden;
 }
 
 .app-body {
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -212,6 +218,7 @@ function closeMobileDrawers() {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -261,7 +268,9 @@ function closeMobileDrawers() {
   }
 
   .app-body.mobile-left-open .mobile-left-panel,
-  .app-body.mobile-right-open .mobile-right-panel {
+  .app-body.mobile-right-open .mobile-right-panel,
+  .mobile-left-panel.is-mobile-open,
+  .mobile-right-panel.is-mobile-open {
     transform: translateX(0);
     pointer-events: auto;
   }

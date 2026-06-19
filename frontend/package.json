@@ -11,6 +11,8 @@
     "test:chat-edit": "node scripts/check-chat-edit-contract.mjs",
     "test:chat-identity": "node scripts/check-chat-identity-thinking-contract.mjs",
     "test:chat-connection": "node scripts/check-chat-connection-contract.mjs",
+    "test:client-id": "node scripts/check-client-id-contract.mjs",
+    "test:token-usage": "node scripts/check-token-usage-panel-contract.mjs",
     "test:markdown": "node scripts/check-markdown-theme.mjs",
     "test:sidebar": "node scripts/check-sidebar-agent-cards.mjs",
     "test:session-route": "node scripts/check-session-route-restore-contract.mjs",

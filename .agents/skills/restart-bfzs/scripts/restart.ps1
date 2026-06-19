@@ -9,7 +9,7 @@
 
 param(
     [int]$Port = 8001,
-    [string]$Host_ = "127.0.0.1"
+    [string]$Host_ = "0.0.0.0"
 )
 
 $ErrorActionPreference = "Stop"
