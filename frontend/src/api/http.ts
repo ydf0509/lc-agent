@@ -35,7 +35,7 @@ export const api = {
   getSessions: () => fetchApi<any[]>('/sessions'),
   createSession: (data: { title?: string; agent_id?: string; model?: string }) =>
     fetchApi<{ id: string; title: string }>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
-  updateSession: (id: string, data: { title?: string; model?: string }) =>
+  updateSession: (id: string, data: { title?: string; model?: string; is_pinned?: boolean }) =>
     fetchApi<any>(`/sessions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteSession: (id: string) =>
     fetchApi<void>(`/sessions/${id}`, { method: 'DELETE' }),

@@ -69,6 +69,12 @@ class SessionRepository:
         sess = await self.get_by_id(session_id)
         if sess is None:
             return None
+
+        if "is_pinned" in kwargs:
+            is_pinned = bool(kwargs.pop("is_pinned"))
+            sess.is_pinned = is_pinned
+            sess.pinned_at = datetime.now(timezone.utc) if is_pinned else None
+
         for key, value in kwargs.items():
             if hasattr(sess, key):
                 setattr(sess, key, value)

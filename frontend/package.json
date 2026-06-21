@@ -15,6 +15,7 @@
     "test:token-usage": "node scripts/check-token-usage-panel-contract.mjs",
     "test:markdown": "node scripts/check-markdown-theme.mjs",
     "test:sidebar": "node scripts/check-sidebar-agent-cards.mjs",
+    "test:session-pinning": "node scripts/check-session-pinning-contract.mjs",
     "test:session-route": "node scripts/check-session-route-restore-contract.mjs",
     "test:restart-bfzs": "node scripts/check-restart-bfzs-contract.mjs",
     "test:favicon": "node scripts/check-favicon-contract.mjs",

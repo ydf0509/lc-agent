@@ -10,6 +10,8 @@ export interface Session {
   agent_id: string
   model: string
   message_count: number
+  is_pinned: boolean
+  pinned_at: string | null
   created_at: string
   updated_at: string
 }
@@ -64,6 +66,8 @@ export const useSessionsStore = defineStore('sessions', () => {
       agent_id: agentId,
       model,
       message_count: 0,
+      is_pinned: false,
+      pinned_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -101,6 +105,8 @@ export const useSessionsStore = defineStore('sessions', () => {
       agent_id: agentId,
       model,
       message_count: 0,
+      is_pinned: false,
+      pinned_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -146,6 +152,23 @@ export const useSessionsStore = defineStore('sessions', () => {
     if (sess) sess.model = model
   }
 
+  async function setPinned(id: string, isPinned: boolean) {
+    if (!localSessionIds.value.has(id)) {
+      const updated = await api.updateSession(id, { is_pinned: isPinned })
+      const idx = sessions.value.findIndex(s => s.id === id)
+      if (idx >= 0) {
+        sessions.value[idx] = { ...sessions.value[idx], ...updated }
+      }
+      return
+    }
+
+    const sess = sessions.value.find(s => s.id === id)
+    if (sess) {
+      sess.is_pinned = isPinned
+      sess.pinned_at = isPinned ? new Date().toISOString() : null
+    }
+  }
+
   const groupedByAgent = computed(() => {
     const agentsStore = useAgentsStore()
     const groups: Record<string, { agentName: string; agentSource: string; sessions: Session[] }> = {}
@@ -173,5 +196,5 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = id
   }
 
-  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, ensureLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, updateModel, updateModelLocal, selectSession }
+  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, ensureLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, updateModel, updateModelLocal, setPinned, selectSession }
 })

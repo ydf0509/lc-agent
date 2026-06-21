@@ -19,53 +19,28 @@ function expectMatch(pattern, message) {
   }
 }
 
-expectIncludes('SIDEBAR_COLLAPSED_GROUPS_KEY')
-expectIncludes('lc-agent:sidebar:collapsed-agent-groups')
-expectIncludes('loadCollapsedGroups')
-expectIncludes('persistCollapsedGroups')
-expectIncludes('class="agent-group-header"')
-expectIncludes('class="agent-card-shell"')
-expectIncludes('class="agent-card-count"')
-expectIncludes("'is-active-agent': group.title === activeAgentName")
-expectMatch(
-  /\.session-list\s+:deep\(\.elx-conversations__group\)[\s\S]*border:\s*1px solid var\(--sidebar-agent-card-border\)/,
-  'Agent 分组缺少卡片边框',
-)
-expectMatch(
-  /\.session-list\s+:deep\(\.elx-conversations__group:has\(\.agent-group-header\.is-active-agent\)\)[\s\S]*border-color:\s*var\(--sidebar-agent-card-active-border\)/,
-  '当前 Agent 卡片缺少高亮边框',
-)
-expectMatch(/\.left-sidebar[\s\S]*--sidebar-agent-card-bg:/, '缺少侧栏卡片主题变量')
-expectMatch(/html\.dark[\s\S]*--sidebar-agent-card-bg:/, '缺少黑色主题侧栏卡片变量')
-expectMatch(
-  /@media\s*\(max-width:\s*900px\)[\s\S]*\.session-list\s+:deep\(\.elx-conversations__group\)[\s\S]*margin:/,
-  '移动端 Agent 卡片没有收紧间距',
-)
-expectMatch(
-  /\.session-list\s+:deep\(\.elx-conversations-item__label\)[\s\S]*text-overflow:\s*ellipsis/,
-  '会话标题缺少省略策略',
-)
-expectMatch(
-  /\.left-sidebar[\s\S]*--sidebar-session-hover-bg:\s*color-mix\(in srgb, var\(--el-color-success\)/,
-  '会话 hover 背景应使用绿色高亮',
-)
-expectMatch(
-  /html\.dark[\s\S]*--sidebar-session-hover-bg:\s*color-mix\(in srgb, var\(--el-color-success\)/,
-  '黑色主题会话 hover 背景应使用绿色高亮',
-)
-expectMatch(
-  /\.session-list\s+:deep\(\.elx-conversations-item:hover\)[\s\S]*background:\s*var\(--sidebar-session-hover-bg\)[\s\S]*color:\s*var\(--sidebar-session-hover-color\)/,
-  '会话 hover 状态没有同时覆盖背景和文字颜色',
-)
-expectMatch(
-  /\.session-list\s+:deep\(\.elx-conversations-item:hover \.elx-conversations-item__label\)[\s\S]*color:\s*var\(--sidebar-session-hover-color\)/,
-  '会话 hover 状态没有覆盖标题文字颜色',
-)
+expectIncludes('searchQuery')
+expectIncludes('visibleCountByAgent')
+expectIncludes('sidebar-search-input')
+expectIncludes('agent-section')
+expectIncludes('agent-section-header')
+expectIncludes('session-children')
+expectIncludes('session-item')
+expectIncludes('show-more-btn')
+expectIncludes('每次显示更多 20 条')
+expectIncludes('setPinned(')
+expectIncludes('is_pinned')
+expectMatch(/const DEFAULT_VISIBLE_COUNT = 5/, '缺少每组默认显示 5 条的常量')
+expectMatch(/const LOAD_MORE_COUNT = 20/, '缺少每次追加 20 条的常量')
+expectMatch(/searchQuery\.value\.trim\(\)/, '搜索逻辑缺少 trim 处理')
+expectMatch(/\.session-children[\s\S]*padding-left:/, '聊天标题缺少明显缩进')
+expectMatch(/\.agent-section-header[\s\S]*font-weight:\s*700/, 'agent 标题缺少更明显层级字重')
+expectMatch(/v-if="group\.hiddenCount > 0"/, '显示更多按钮缺少隐藏数量判断')
 
 if (failures.length > 0) {
-  console.error('Agent 会话侧栏契约测试失败:')
+  console.error('Agent 层级侧栏契约测试失败:')
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
-console.log('Agent 会话侧栏契约测试通过')
+console.log('Agent 层级侧栏契约测试通过')

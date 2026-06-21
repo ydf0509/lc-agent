@@ -58,6 +58,57 @@ async def test_update_session_title(app):
 
 
 @pytest.mark.asyncio
+async def test_list_sessions_includes_default_pin_fields(app):
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/sessions", json={"title": "Pinned Check"})
+        session_id = create_resp.json()["id"]
+
+        list_resp = await client.get("/api/sessions")
+
+    assert list_resp.status_code == 200
+    data = list_resp.json()
+    assert len(data) == 1
+    assert data[0]["id"] == session_id
+    assert data[0]["is_pinned"] is False
+    assert data[0]["pinned_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_session_pin_status(app):
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/sessions", json={"title": "Pin Me"})
+        session_id = create_resp.json()["id"]
+
+        pin_resp = await client.put(
+            f"/api/sessions/{session_id}",
+            json={"is_pinned": True},
+        )
+        assert pin_resp.status_code == 200
+        assert pin_resp.json()["is_pinned"] is True
+        assert pin_resp.json()["pinned_at"] is not None
+
+        list_after_pin = await client.get("/api/sessions")
+        pinned_item = list_after_pin.json()[0]
+        assert pinned_item["is_pinned"] is True
+        assert pinned_item["pinned_at"] is not None
+
+        unpin_resp = await client.put(
+            f"/api/sessions/{session_id}",
+            json={"is_pinned": False},
+        )
+        assert unpin_resp.status_code == 200
+        assert unpin_resp.json()["is_pinned"] is False
+        assert unpin_resp.json()["pinned_at"] is None
+
+        list_after_unpin = await client.get("/api/sessions")
+        unpinned_item = list_after_unpin.json()[0]
+        assert unpinned_item["is_pinned"] is False
+        assert unpinned_item["pinned_at"] is None
+
+
+@pytest.mark.asyncio
 async def test_delete_session(app):
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

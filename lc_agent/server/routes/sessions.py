@@ -17,24 +17,28 @@ class SessionCreateRequest(BaseModel):
 class SessionUpdateRequest(BaseModel):
     title: str | None = None
     model: str | None = None
+    is_pinned: bool | None = None
+
+
+def serialize_session(s):
+    return {
+        "id": s.id,
+        "title": s.title,
+        "agent_id": s.agent_id,
+        "model": s.model,
+        "message_count": s.message_count,
+        "is_pinned": s.is_pinned,
+        "pinned_at": s.pinned_at.isoformat() if s.pinned_at else None,
+        "created_at": s.created_at.isoformat(),
+        "updated_at": s.updated_at.isoformat(),
+    }
 
 
 @router.get("/sessions")
 async def list_sessions(db: AsyncSession = Depends(get_db_session)):
     repo = SessionRepository(db)
     sessions = await repo.list_all()
-    return [
-        {
-            "id": s.id,
-            "title": s.title,
-            "agent_id": s.agent_id,
-            "model": s.model,
-            "message_count": s.message_count,
-            "created_at": s.created_at.isoformat(),
-            "updated_at": s.updated_at.isoformat(),
-        }
-        for s in sessions
-    ]
+    return [serialize_session(s) for s in sessions]
 
 
 @router.post("/sessions", status_code=201)
@@ -51,7 +55,7 @@ async def update_session(session_id: str, body: SessionUpdateRequest, db: AsyncS
     result = await repo.update(session_id, **update_data)
     if result is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {"id": result.id, "title": result.title}
+    return serialize_session(result)
 
 
 @router.delete("/sessions/{session_id}", status_code=204)

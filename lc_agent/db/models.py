@@ -33,6 +33,8 @@ class SessionMeta(SQLModel, table=True):
     agent_id: str = "__chat__"
     model: str = ""
     message_count: int = 0
+    is_pinned: bool = False
+    pinned_at: datetime | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 
