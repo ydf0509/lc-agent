@@ -169,7 +169,7 @@ npm run build    # 构建到 lc_agent/web/dist/
 答：
 可以当做是openwebui privategpt来使用，自定义apikey和baseurl，实现聊天功能。
 也可以当做是codex claudecode opencode来使用，配置编程专用mcp serena和skills。
-可以当做是langchain 智能体的管理界面，管理自己的智能体，同时支持热切换模型 skills  mcp tools，比频繁修改代码然后在控制台提问好很多。
+可以当做是langchain 智能体的管理界面，管理自己的智能体，同时支持热切换模型 skills  mcp tools，比频繁修改代码然后重启在控制台循环提问好很多。
 
 ### 2. lc-agent 比一般的llm网页聊天工具有什么优势？
 答：
