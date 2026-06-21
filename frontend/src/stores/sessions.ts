@@ -45,6 +45,19 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
 
     const id = createClientId()
+    return ensureLocalSession(id, agentId, model)
+  }
+
+  function ensureLocalSession(id: string, agentId: string = '__chat__', model: string = ''): Session {
+    const existing = sessions.value.find(s => s.id === id)
+    if (existing) {
+      existing.agent_id = agentId
+      existing.model = model || existing.model
+      currentSessionId.value = existing.id
+      localSessionIds.value.add(existing.id)
+      return existing
+    }
+
     const session: Session = {
       id,
       title: '新对话',
@@ -160,5 +173,5 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSessionId.value = id
   }
 
-  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, updateModel, updateModelLocal, selectSession }
+  return { sessions, currentSessionId, currentSession, groupedByAgent, init, createSession, createLocalSession, ensureLocalSession, persistSession, isLocalSession, deleteSession, updateTitle, updateTitleLocal, updateModel, updateModelLocal, selectSession }
 })

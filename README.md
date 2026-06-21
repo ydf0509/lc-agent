@@ -1,10 +1,15 @@
 # lc-agent
 
-基于 LangChain / LangGraph 的 AI Agent 框架，内置 Web UI。
+基于 LangChain / LangGraph 的 AI Agent 框架，内置 Web UI。lc-agent 既是框架又是产品。
+用户可以在自己项目导入lc-agent框架，使用langchain框架开发自己的具体的agent应用；用户也可以不写代码，直接在页面创建配置智能体。
+
+[lc-agent-bfzs](https://github.com/ydf0509/lc-agent-bfzs) 是基于lc-agent框架开发的自定义项目,是用于演示使用lc-agent框架的项目。
 
 ## 定位
 
-lc-agent 是一个**可导入的框架**，用户在自己的项目中 `import lc_agent` 来开发自定义 Agent 应用，无需 clone 或修改框架代码。
+lc-agent 是一个**可导入的框架**，用户在自己的项目中 `import lc_agent` 来开发自定义 Agent 应用，无需 clone 或修改框架代码。 用户如果一行代码不会写，也可以使用他来接入mcp和skills来实现agent，这就好比你使用codex claudecode opencode等工具，虽然你不会改造codex claudecode的源码但是可以接入mcp 和skills来实现自己的个性化agent。
+
+如果你啥mcp 和skills都不配置，直接使用lc-agent。只配置baseurl 和apikey，那么也可以使用内置的chat智能体，就是那种不能执行工具的，就好像你在deepseek 豆包网页上聊天那种，此时大模型只能聊天不能调用工具操作你的电脑。
 
 ## 功能
 
@@ -158,6 +163,24 @@ npm run build    # 构建到 lc_agent/web/dist/
 - 任何其他返回 `reasoning_content` 或 `reasoning` 的供应商
 
 无需为每个供应商 import 不同的 Chat Model 类。
+
+## 自问自答
+### 1. lc-agent 能做什么？
+答：
+可以当做是openwebui privategpt来使用，自定义apikey和baseurl，实现聊天功能。
+也可以当做是codex claudecode opencode来使用，配置编程专用mcp serena和skills。
+可以当做是langchain 智能体的管理界面，管理自己的智能体，同时支持热切换模型 skills  mcp tools，比频繁修改代码然后在控制台提问好很多。
+
+### 2. lc-agent 比一般的llm网页聊天工具有什么优势？
+答：
+lc-agent比一般的llm网页聊天项目录入openwebui这种，加了更多可视化利于码农调试agent的内容
+例如把工具调用入参和响应时间和返回内容可视化做得非常好，几乎等同于有了langsmith langfuse那种可观测性了，
+把agent会话的每一轮tokens 消耗、缓存命中详细记录，让人心里有谱，花了多少tokens
+
+### 3. lc-agent 知否有rag知识库的功能？
+
+答： [nbrag](https://github.com/ydf0509/nbrag) ，lc-agent不重复实现rag知识库，通过把nbrag这个mcp配置给agent，实现agentic rag功能，nbrag远超dify 和 openwebui 内置的知识库检索能力。
+
 
 ## License
 

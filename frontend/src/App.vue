@@ -89,7 +89,21 @@ onMounted(async () => {
     return
   }
 
+  const routeSessionId = typeof sessionId === 'string' ? sessionId : ''
   const agentQuery = route.query.agent as string
+  if (routeSessionId && agentQuery && agentsStore.agents.find(a => a.id === agentQuery)) {
+    const defaultModel = agentsStore.agents.find(a => a.id === agentQuery)?.default_model || ''
+    sessionsStore.ensureLocalSession(routeSessionId, agentQuery, defaultModel)
+    sessionsStore.selectSession(routeSessionId)
+    if (agentQuery !== agentsStore.currentAgentId) {
+      await agentsStore.selectAgent(agentQuery)
+    }
+    if (defaultModel) {
+      toolsStore.setModel(defaultModel)
+    }
+    return
+  }
+
   if (agentQuery && agentsStore.agents.find(a => a.id === agentQuery)) {
     await agentsStore.selectAgent(agentQuery)
   }
@@ -116,6 +130,22 @@ async function restoreSession(sessionId: string) {
     chatStore.disconnect()
     await chatStore.loadMessages(sessionId)
     await chatStore.connect(sessionId)
+    return
+  }
+
+  const agentQuery = route.query.agent as string
+  if (agentQuery && agentsStore.agents.find(a => a.id === agentQuery)) {
+    const defaultModel = agentsStore.agents.find(a => a.id === agentQuery)?.default_model || ''
+    sessionsStore.ensureLocalSession(sessionId, agentQuery, defaultModel)
+    sessionsStore.selectSession(sessionId)
+    if (agentQuery !== agentsStore.currentAgentId) {
+      await agentsStore.selectAgent(agentQuery)
+    }
+    if (defaultModel) {
+      toolsStore.setModel(defaultModel)
+    }
+    chatStore.clearMessages()
+    chatStore.disconnect()
   }
 }
 
