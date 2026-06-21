@@ -47,8 +47,8 @@
       />
       <span class="model-badge">{{ modelName }}</span>
       <span class="status-dot" :class="connected ? 'connected' : 'disconnected'" />
-      <span class="status-text" :title="connected ? 'WebSocket 已连接' : '发送消息时自动连接'">
-        {{ connected ? '已连接' : '待连接' }}
+      <span class="status-text" :title="connected ? 'WebSocket 已连接' : 'WebSocket 未连接'">
+        {{ connected ? '已连接' : '未连接' }}
       </span>
       <el-button :icon="isDark ? Sunny : Moon" circle size="small" @click="toggleDark()" />
     </div>

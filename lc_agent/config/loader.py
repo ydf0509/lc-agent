@@ -75,8 +75,12 @@ def load_config(
             "default_model": "",
             "streaming": True,
         },
-        "mcp": {},
-        "session": {"db_path": ""},
+        "database": {
+            "url": "sqlite+aiosqlite:///./lc_agent_data.db",
+            "checkpoint_path": "./lc_agent_checkpoints.db",
+        },
+        "skills": {"directory": "./skills"},
+        "mcp_servers": {},
         "_config_path": None,
         "_project_root": str(Path.cwd()),
     }

@@ -105,7 +105,13 @@ async def get_session_messages(
             content = getattr(msg, "content", "")
             tool_calls = getattr(msg, "tool_calls", None)
 
-            item = {"role": msg_type, "content": content}
+            role = msg_type
+            if msg_type == "human":
+                role = "user"
+            elif msg_type == "ai":
+                role = "assistant"
+
+            item = {"role": role, "content": content}
 
             if tool_calls:
                 item["tool_calls"] = [

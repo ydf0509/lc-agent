@@ -28,16 +28,19 @@ class LcAgentApp:
         self.skill_scanner.scan()
         from lc_agent.mcp.manager import McpManager
         mcp_config = config.get("mcp_servers", {})
-        self.mcp_manager = McpManager(mcp_config)
+        self.mcp_manager = McpManager(mcp_config, on_state_change=self._on_mcp_state_change)
         self.fastapi_app = create_app(config, lifespan=self._lifespan)
         self.fastapi_app.state.mcp_manager = self.mcp_manager
         self.fastapi_app.state.skill_scanner = self.skill_scanner
         self.engine._skill_scanner = self.skill_scanner
         self.engine._mcp_manager = self.mcp_manager
         self.fastapi_app.state.engine = self.engine
-        self._ws_handler = ChatWebSocketHandler(self.engine)
+        self._ws_handler = ChatWebSocketHandler(self.engine, db_url=self._db_url)
         self._setup_websocket_route()
         mount_static_files(self.fastapi_app)
+
+    def _on_mcp_state_change(self):
+        self.engine._mcp_generation += 1
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):
@@ -63,12 +66,14 @@ class LcAgentApp:
                 connected = [s for s in self.mcp_manager.servers if s.status == "connected"]
                 if connected:
                     print(f"[MCP] Connected: {[s.name for s in connected]}")
-                    self.engine._mcp_generation += 1
             except Exception as e:
                 print(f"[MCP] Background connection error: {e}")
 
         asyncio.create_task(_connect_mcp_background())
-        yield
+        try:
+            yield
+        finally:
+            await self.mcp_manager.shutdown()
 
     def _setup_websocket_route(self):
         import asyncio

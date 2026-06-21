@@ -96,7 +96,11 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   async function deleteSession(id: string) {
-    await api.deleteSession(id)
+    if (!localSessionIds.value.has(id)) {
+      await api.deleteSession(id)
+    } else {
+      localSessionIds.value.delete(id)
+    }
     sessions.value = sessions.value.filter(s => s.id !== id)
     if (currentSessionId.value === id) {
       currentSessionId.value = sessions.value[0]?.id || null
@@ -104,7 +108,9 @@ export const useSessionsStore = defineStore('sessions', () => {
   }
 
   async function updateTitle(id: string, title: string) {
-    await api.updateSession(id, { title })
+    if (!localSessionIds.value.has(id)) {
+      await api.updateSession(id, { title })
+    }
     const sess = sessions.value.find(s => s.id === id)
     if (sess) sess.title = title
   }

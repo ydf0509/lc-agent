@@ -14,8 +14,9 @@ from lc_agent.server.dependencies import get_engine
 router = APIRouter(tags=["agents"])
 
 
-async def get_db():
-    session = _get_db_session()
+async def get_db(request: Request):
+    db_url = request.app.state.config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
+    session = _get_db_session(db_url)
     try:
         yield session
     finally:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass
@@ -22,12 +22,13 @@ class McpServerStatus:
 class McpManager:
     """Manages persistent MCP server connections and tool invocation."""
 
-    def __init__(self, config: dict[str, dict]):
+    def __init__(self, config: dict[str, dict], on_state_change: Callable[[], None] | None = None):
         self._config = config
+        self._on_state_change = on_state_change
         self._servers: dict[str, McpServerStatus] = {}
         self._sessions: dict[str, Any] = {}
         self._locks: dict[str, asyncio.Lock] = {}
-        self._cleanup_tasks: list[Any] = []
+        self._server_contexts: dict[str, tuple[Any, Any]] = {}
 
         for name, conf in config.items():
             enabled = conf.get("enabled", True)
@@ -50,6 +51,52 @@ class McpManager:
     def get_server(self, name: str) -> McpServerStatus | None:
         return self._servers.get(name)
 
+    def _notify_state_change(self) -> None:
+        """Notify the owner that MCP state changed without coupling to the engine."""
+        if self._on_state_change is None:
+            return
+        try:
+            self._on_state_change()
+        except Exception:
+            pass
+
+    def _set_server_error(self, name: str, error: str) -> None:
+        server = self._servers.get(name)
+        if server is None:
+            return
+        server.status = "error"
+        server.error = error
+        self._notify_state_change()
+
+    async def _cleanup_server(self, name: str) -> None:
+        """Close and forget a single server's persistent connection."""
+        self._sessions.pop(name, None)
+        self._locks.pop(name, None)
+        contexts = self._server_contexts.pop(name, None)
+        if contexts is None:
+            return
+
+        cm, session_cm = contexts
+        try:
+            await session_cm.__aexit__(None, None, None)
+        except Exception:
+            pass
+        try:
+            await cm.__aexit__(None, None, None)
+        except Exception:
+            pass
+
+    async def _reconnect_server(self, name: str) -> bool:
+        """Reconnect one enabled configured server after a persistent session fails."""
+        server = self._servers.get(name)
+        conf = self._config.get(name)
+        if server is None or conf is None or not server.enabled:
+            return False
+
+        await self._cleanup_server(name)
+        await self._connect_server(name, conf)
+        return name in self._sessions and self._servers[name].status == "connected"
+
     async def connect_all(self):
         """Connect to all configured MCP servers (persistent)."""
         for name, conf in self._config.items():
@@ -71,8 +118,7 @@ class McpManager:
             else:
                 await self._connect_stdio_persistent(name, conf)
         except Exception as e:
-            self._servers[name].status = "error"
-            self._servers[name].error = str(e)
+            self._set_server_error(name, str(e))
 
     async def _connect_stdio_persistent(self, name: str, conf: dict):
         """Keep a stdio MCP server process alive."""
@@ -98,7 +144,7 @@ class McpManager:
         session = await session_cm.__aenter__()
         await session.initialize()
 
-        self._cleanup_tasks.append((cm, session_cm))
+        self._server_contexts[name] = (cm, session_cm)
         self._sessions[name] = session
         self._extract_tools(name, await session.list_tools())
 
@@ -119,7 +165,7 @@ class McpManager:
         session = await session_cm.__aenter__()
         await session.initialize()
 
-        self._cleanup_tasks.append((cm, session_cm))
+        self._server_contexts[name] = (cm, session_cm)
         self._sessions[name] = session
         self._extract_tools(name, await session.list_tools())
 
@@ -140,7 +186,7 @@ class McpManager:
         session = await session_cm.__aenter__()
         await session.initialize()
 
-        self._cleanup_tasks.append((cm, session_cm))
+        self._server_contexts[name] = (cm, session_cm)
         self._sessions[name] = session
         self._extract_tools(name, await session.list_tools())
 
@@ -160,37 +206,78 @@ class McpManager:
         self._servers[name].tool_schemas = tool_schemas
         self._servers[name].error = None
         self._locks[name] = asyncio.Lock()
+        self._notify_state_change()
 
-    async def call_tool(self, server_name: str, tool_name: str, arguments: dict) -> str:
-        """Invoke a tool on a connected MCP server (serialized per server)."""
+    async def _call_tool_once(self, server_name: str, tool_name: str, arguments: dict) -> str:
         session = self._sessions.get(server_name)
         if session is None:
-            return f"MCP server '{server_name}' not connected"
+            raise RuntimeError(f"MCP server '{server_name}' not connected")
 
         lock = self._locks.get(server_name)
-        try:
-            if lock:
-                async with lock:
-                    result = await asyncio.wait_for(
-                        session.call_tool(tool_name, arguments),
-                        timeout=60.0,
-                    )
-            else:
+        if lock:
+            async with lock:
                 result = await asyncio.wait_for(
                     session.call_tool(tool_name, arguments),
                     timeout=60.0,
                 )
-            parts = []
-            for content in result.content:
-                if hasattr(content, "text"):
-                    parts.append(content.text)
-                else:
-                    parts.append(str(content))
-            return "\n".join(parts) if parts else "(empty result)"
+        else:
+            result = await asyncio.wait_for(
+                session.call_tool(tool_name, arguments),
+                timeout=60.0,
+            )
+
+        parts = []
+        for content in result.content:
+            if hasattr(content, "text"):
+                parts.append(content.text)
+            else:
+                parts.append(str(content))
+        return "\n".join(parts) if parts else "(empty result)"
+
+    async def call_tool(self, server_name: str, tool_name: str, arguments: dict) -> str:
+        """Invoke a tool on a connected MCP server, reconnecting once if needed."""
+        server = self._servers.get(server_name)
+        if server is not None and not server.enabled:
+            await self._cleanup_server(server_name)
+            server.status = "disabled"
+            return f"MCP server '{server_name}' is disabled"
+
+        if self._sessions.get(server_name) is None:
+            if server is not None and server_name in self._config:
+                if await self._reconnect_server(server_name):
+                    try:
+                        return await self._call_tool_once(server_name, tool_name, arguments)
+                    except Exception as e:
+                        self._set_server_error(server_name, str(e))
+                        await self._cleanup_server(server_name)
+                        return f"MCP tool error after reconnect: {e}"
+                reconnect_error = server.error or f"MCP server '{server_name}' not connected"
+                return f"MCP server '{server_name}' reconnect failed: {reconnect_error}"
+            return f"MCP server '{server_name}' not connected"
+
+        try:
+            return await self._call_tool_once(server_name, tool_name, arguments)
         except asyncio.TimeoutError:
-            return f"MCP tool '{tool_name}' timed out after 60s"
+            initial_error = f"MCP tool '{tool_name}' timed out after 60s"
         except Exception as e:
-            return f"MCP tool error: {e}"
+            initial_error = f"MCP tool error: {e}"
+
+        self._set_server_error(server_name, initial_error)
+        if not await self._reconnect_server(server_name):
+            server = self._servers.get(server_name)
+            reconnect_error = server.error if server and server.error else initial_error
+            return f"MCP server '{server_name}' reconnect failed: {reconnect_error}"
+
+        try:
+            return await self._call_tool_once(server_name, tool_name, arguments)
+        except asyncio.TimeoutError:
+            final_error = f"MCP tool '{tool_name}' timed out after reconnect"
+        except Exception as e:
+            final_error = f"MCP tool error after reconnect: {e}"
+
+        self._set_server_error(server_name, final_error)
+        await self._cleanup_server(server_name)
+        return final_error
 
     def get_tools_for_server(self, server_name: str) -> list[str]:
         """Get tool names for a given server."""
@@ -232,14 +319,5 @@ class McpManager:
 
     async def shutdown(self):
         """Clean up all persistent connections."""
-        for cm, session_cm in self._cleanup_tasks:
-            try:
-                await session_cm.__aexit__(None, None, None)
-            except Exception:
-                pass
-            try:
-                await cm.__aexit__(None, None, None)
-            except Exception:
-                pass
-        self._sessions.clear()
-        self._cleanup_tasks.clear()
+        for name in list(self._server_contexts):
+            await self._cleanup_server(name)

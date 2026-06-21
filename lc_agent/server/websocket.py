@@ -12,8 +12,9 @@ from lc_agent.core.engine import AgentEngine
 class ChatWebSocketHandler:
     """Handles WebSocket connections for streaming chat."""
 
-    def __init__(self, engine: AgentEngine):
+    def __init__(self, engine: AgentEngine, db_url: str = "sqlite+aiosqlite:///./lc_agent_data.db"):
         self.engine = engine
+        self.db_url = db_url
         self.active_connections: dict[str, WebSocket] = {}
         self._message_counts: dict[str, int] = {}
         self._cancel_flags: dict[str, bool] = {}
@@ -62,7 +63,7 @@ class ChatWebSocketHandler:
                     "thread_id": thread_id,
                     "title": preliminary_title,
                 })
-                asyncio.create_task(self._save_title(thread_id, preliminary_title))
+                await self._ensure_session(thread_id, preliminary_title, preset_id, model_id)
 
             try:
                 if replace_from_message_id:
@@ -96,6 +97,10 @@ class ChatWebSocketHandler:
                             **usage_rounds[-1],
                         })
 
+                if assistant_in_thinking:
+                    assistant_content_parts.append("<!--THINK_END-->")
+                    assistant_in_thinking = False
+
                 done_payload: dict = {"type": "done"}
                 if usage_rounds:
                     done_payload["usage"] = usage_rounds
@@ -114,6 +119,7 @@ class ChatWebSocketHandler:
                 await websocket.send_json(done_payload)
 
                 self._message_counts[thread_id] = self._message_counts.get(thread_id, 0) + 1
+                asyncio.create_task(self._increment_session_message_count(thread_id))
                 if self._message_counts[thread_id] == 1:
                     asyncio.create_task(
                         self._generate_and_push_title(websocket, thread_id, content, preset_id, model_id)
@@ -149,12 +155,45 @@ class ChatWebSocketHandler:
             except Exception as e:
                 await websocket.send_json({"type": "error", "message": str(e)})
 
+    async def _ensure_session(self, thread_id: str, title: str, agent_id: str, model: str):
+        """Create session metadata on first websocket message if it does not exist."""
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import SessionRepository
+
+            session = get_async_session(self.db_url)
+            try:
+                repo = SessionRepository(session)
+                existing = await repo.get_by_id(thread_id)
+                if existing is None:
+                    await repo.create(id=thread_id, title=title or "新对话", agent_id=agent_id, model=model, message_count=0)
+                else:
+                    await repo.update(thread_id, title=title or existing.title, agent_id=agent_id, model=model or existing.model)
+            finally:
+                await session.close()
+        except Exception:
+            pass
+
+    async def _increment_session_message_count(self, thread_id: str):
+        """Increment persisted session message count after a completed round."""
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import SessionRepository
+
+            session = get_async_session(self.db_url)
+            try:
+                await SessionRepository(session).increment_messages(thread_id)
+            finally:
+                await session.close()
+        except Exception:
+            pass
+
     async def _save_title(self, thread_id: str, title: str):
         """Save title to DB without pushing to client."""
         try:
             from lc_agent.db.engine import get_async_session
             from lc_agent.db.repository import SessionRepository
-            session = get_async_session()
+            session = get_async_session(self.db_url)
             try:
                 repo = SessionRepository(session)
                 await repo.update(thread_id, title=title)
@@ -187,7 +226,7 @@ class ChatWebSocketHandler:
 
             from lc_agent.db.engine import get_async_session
             from lc_agent.db.repository import SessionRepository
-            session = get_async_session()
+            session = get_async_session(self.db_url)
             try:
                 repo = SessionRepository(session)
                 await repo.update(thread_id, title=title)
@@ -212,7 +251,7 @@ class ChatWebSocketHandler:
             from lc_agent.db.engine import get_async_session
             from lc_agent.db.repository import ChatUiMessageRepository
 
-            session = get_async_session()
+            session = get_async_session(self.db_url)
             try:
                 repo = ChatUiMessageRepository(session)
                 await repo.create(
@@ -233,7 +272,7 @@ class ChatWebSocketHandler:
             from lc_agent.db.engine import get_async_session
             from lc_agent.db.repository import ChatUiMessageRepository
 
-            session = get_async_session()
+            session = get_async_session(self.db_url)
             try:
                 repo = ChatUiMessageRepository(session)
                 await repo.truncate_from_message(thread_id, message_id)

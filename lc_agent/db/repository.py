@@ -115,7 +115,10 @@ class ChatUiMessageRepository:
         )
         self.session.add(message)
         await self.session.commit()
-        await self.session.refresh(message)
+        try:
+            await self.session.refresh(message)
+        except Exception:
+            pass
         return message
 
     async def list_by_session(self, session_id: str) -> list[ChatUiMessage]:

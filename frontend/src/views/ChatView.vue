@@ -407,7 +407,9 @@ function handleMarkdownClick(event: MouseEvent) {
 }
 
 onMounted(() => {
-  chatStore.connect()
+  if (!chatStore.isConnected && !chatStore.threadId) {
+    chatStore.connect()
+  }
   document.addEventListener('click', handleMarkdownClick)
 })
 

@@ -8,7 +8,9 @@ from lc_agent.core.engine import AgentEngine
 @pytest.fixture
 def handler():
     engine = MagicMock(spec=AgentEngine)
-    return ChatWebSocketHandler(engine)
+    engine._presets = {}
+    engine._custom_presets = {}
+    return ChatWebSocketHandler(engine, db_url="sqlite+aiosqlite:///:memory:")
 
 
 @pytest.mark.asyncio

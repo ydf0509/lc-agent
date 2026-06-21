@@ -51,6 +51,11 @@ def test_add_agent_duplicate_raises(app_instance):
 @pytest.mark.asyncio
 async def test_api_agents_includes_custom(app_instance):
     """GET /api/agents should include custom agents with source flag."""
+    from lc_agent.db.engine import init_db, reset_engine
+
+    reset_engine()
+    await init_db("sqlite+aiosqlite:///./lc_agent_data.db")
+
     mock_graph = MagicMock()
     app_instance.add_agent("api_agent", mock_graph, description="API test")
 

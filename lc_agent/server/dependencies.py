@@ -1,6 +1,4 @@
 # lc_agent/server/dependencies.py
-from contextlib import asynccontextmanager
-
 from fastapi import Request
 
 from lc_agent.core.engine import AgentEngine
@@ -18,9 +16,10 @@ def get_registry(request: Request) -> ToolRegistry:
     return ToolRegistry()
 
 
-async def get_db_session():
+async def get_db_session(request: Request):
     """Dependency to get an async DB session."""
-    session = _get_db_session()
+    db_url = request.app.state.config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
+    session = _get_db_session(db_url)
     try:
         yield session
     finally:

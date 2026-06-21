@@ -27,25 +27,40 @@
       </div>
     </div>
     <div v-if="toolCall.result" class="tool-result">
-      <pre>{{ toolCall.result }}</pre>
+      <div class="tool-result-rendered" v-html="renderedResult" />
       <button v-if="isLong" class="fullscreen-btn" @click.stop="showModal = true" title="查看完整内容">⛶</button>
     </div>
     </template>
 
     <teleport to="body">
       <div v-if="showModal" class="tool-modal-backdrop" @click="showModal = false">
-        <div class="tool-modal" @click.stop>
+        <div class="tool-modal" role="dialog" aria-modal="true" @click.stop>
           <div class="tool-modal-header">
-            <span class="tool-modal-title">{{ toolCall.name }}</span>
+            <div class="tool-modal-title-wrap">
+              <span class="tool-modal-kicker">工具结果</span>
+              <span class="tool-modal-title">{{ toolCall.name }}</span>
+            </div>
             <div class="modal-actions">
-              <button class="modal-toggle-btn" :class="{ active: renderMode }" @click="renderMode = !renderMode">
-                {{ renderMode ? '📄 原文' : '✨ 渲染' }}
-              </button>
-              <button class="tool-modal-close" @click="showModal = false">✕</button>
+              <button class="tool-modal-close" aria-label="关闭" @click="showModal = false">✕</button>
             </div>
           </div>
-          <pre v-if="!renderMode" class="tool-modal-body">{{ toolCall.result }}</pre>
-          <div v-else class="tool-modal-body rendered" v-html="renderedResult" />
+          <div class="tool-modal-toolbar">
+            <input
+              v-model="searchQuery"
+              class="tool-search-input"
+              type="text"
+              placeholder="搜索关键字..."
+              @keydown.enter.prevent="jumpToNextMatch"
+            />
+            <div class="tool-search-actions">
+              <span v-if="searchQuery" class="tool-search-count">{{ activeMatchLabel }}</span>
+              <button class="tool-search-btn" :disabled="!matchCount" @click="jumpToPrevMatch">↑</button>
+              <button class="tool-search-btn" :disabled="!matchCount" @click="jumpToNextMatch">↓</button>
+            </div>
+          </div>
+          <div class="tool-modal-content">
+            <div ref="modalBodyRef" class="tool-modal-body rendered" v-html="modalRenderedResult" />
+          </div>
         </div>
       </div>
     </teleport>
@@ -53,15 +68,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { Loading, Check, Tools } from '@element-plus/icons-vue'
 import type { ToolCall } from '@/stores/chat'
 
 const props = defineProps<{ toolCall: ToolCall; collapsed?: boolean }>()
 const showModal = ref(false)
-const renderMode = ref(false)
 const isCollapsed = ref(props.collapsed ?? false)
 const userToggled = ref(false)
+const searchQuery = ref('')
+const activeMatchIndex = ref(0)
+const modalBodyRef = ref<HTMLElement | null>(null)
 
 function toggleCollapse() {
   userToggled.value = true
@@ -75,16 +92,101 @@ watch(() => props.collapsed, (collapsed) => {
 
 const isLong = computed(() => (props.toolCall.result?.length || 0) > 300)
 
-const renderedResult = computed(() => {
-  if (!props.toolCall.result) return ''
-  return props.toolCall.result
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function normalizeResult(value?: string): string {
+  if (!value) return ''
+  return value
+    .replace(/\\u3000/g, '　')
     .replace(/\\n/g, '\n')
+}
+
+function renderTextToHtml(value: string): string {
+  return escapeHtml(value)
     .replace(/\n/g, '<br>')
-    .replace(/  /g, '&nbsp;&nbsp;')
+    .replace(/ {2}/g, '&nbsp;&nbsp;')
+}
+
+const normalizedResult = computed(() => normalizeResult(props.toolCall.result))
+
+const renderedResult = computed(() => renderTextToHtml(normalizedResult.value))
+
+const modalRenderedResult = computed(() => {
+  const query = searchQuery.value.trim()
+  if (!query) return renderedResult.value
+
+  const highlighted = normalizedResult.value.replace(
+    new RegExp(escapeRegExp(query), 'gi'),
+    (match) => `@@HIT_START@@${match}@@HIT_END@@`,
+  )
+
+  return renderTextToHtml(highlighted)
+    .replace(/@@HIT_START@@/g, '<mark class="tool-search-hit">')
+    .replace(/@@HIT_END@@/g, '</mark>')
 })
+
+const matchCount = computed(() => {
+  const query = searchQuery.value.trim()
+  if (!query) return 0
+  const matches = normalizedResult.value.match(new RegExp(escapeRegExp(query), 'gi'))
+  return matches?.length || 0
+})
+
+const activeMatchLabel = computed(() => {
+  if (!matchCount.value) return '0/0'
+  return `${activeMatchIndex.value + 1}/${matchCount.value}`
+})
+
+async function syncSearchHighlights() {
+  await nextTick()
+  const container = modalBodyRef.value
+  if (!container) return
+  const hits = Array.from(container.querySelectorAll('mark.tool-search-hit')) as HTMLElement[]
+  hits.forEach((hit, index) => {
+    hit.classList.toggle('is-active', index === activeMatchIndex.value)
+  })
+  if (hits.length > 0) {
+    hits[activeMatchIndex.value]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
+}
+
+function jumpToNextMatch() {
+  if (!matchCount.value) return
+  activeMatchIndex.value = (activeMatchIndex.value + 1) % matchCount.value
+}
+
+function jumpToPrevMatch() {
+  if (!matchCount.value) return
+  activeMatchIndex.value = (activeMatchIndex.value - 1 + matchCount.value) % matchCount.value
+}
+
+watch(searchQuery, () => {
+  activeMatchIndex.value = 0
+  syncSearchHighlights()
+})
+
+watch(activeMatchIndex, () => {
+  syncSearchHighlights()
+})
+
+watch(showModal, (visible) => {
+  if (!visible) {
+    searchQuery.value = ''
+    activeMatchIndex.value = 0
+    return
+  }
+  syncSearchHighlights()
+})
+
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -250,11 +352,13 @@ const statusLabel = computed(() => {
   position: relative;
 }
 
-.tool-result pre {
+.tool-result-rendered {
   margin: 0;
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   color: var(--el-text-color-secondary);
+  line-height: 1.65;
 }
 
 .fullscreen-btn {
@@ -288,15 +392,16 @@ const statusLabel = computed(() => {
 }
 
 .tool-modal {
+  width: min(900px, calc(100vw - 80px));
+  max-height: min(80vh, 760px);
+  min-height: 0;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color);
   border-radius: 12px;
-  max-width: 90vw;
-  max-height: 80vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   box-shadow: 0 16px 48px color-mix(in srgb, var(--el-bg-color-page) 50%, transparent);
-  min-width: 500px;
 }
 
 .tool-modal-header {
@@ -306,12 +411,26 @@ const statusLabel = computed(() => {
   padding: 12px 16px;
   border-bottom: 1px solid var(--el-border-color);
   gap: 12px;
+  flex: 0 0 auto;
+}
+
+.tool-modal-title-wrap {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-modal-kicker {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .modal-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .modal-toggle-btn {
@@ -336,10 +455,14 @@ const statusLabel = computed(() => {
 }
 
 .tool-modal-title {
+  min-width: 0;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   font-weight: 600;
   color: var(--el-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-modal-close {
@@ -361,21 +484,97 @@ const statusLabel = computed(() => {
   color: var(--el-text-color-primary);
 }
 
+.tool-modal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: color-mix(in srgb, var(--el-fill-color-light) 78%, transparent);
+}
+
+.tool-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-primary);
+  outline: none;
+}
+
+.tool-search-input:focus {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--el-color-primary) 14%, transparent);
+}
+
+.tool-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.tool-search-count {
+  min-width: 42px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  text-align: right;
+}
+
+.tool-search-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+
+.tool-search-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tool-modal-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 .tool-modal-body {
-  flex: 1;
+  min-height: 100%;
   padding: 16px;
   margin: 0;
-  overflow: auto;
   font-size: 13px;
   line-height: 1.7;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   color: var(--el-text-color-regular);
 }
 
 .tool-modal-body.rendered {
   white-space: normal;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.tool-modal-body :deep(.tool-search-hit),
+.tool-modal-body.rendered :deep(.tool-search-hit) {
+  background: rgba(250, 204, 21, 0.35);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+.tool-modal-body :deep(.tool-search-hit.is-active),
+.tool-modal-body.rendered :deep(.tool-search-hit.is-active) {
+  background: rgba(245, 158, 11, 0.78);
 }
 
 .spinning {
@@ -411,6 +610,89 @@ const statusLabel = computed(() => {
   .tool-meta {
     margin-left: 0;
     gap: 7px;
+  }
+
+  .tool-modal-backdrop {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    background: color-mix(in srgb, var(--el-bg-color-page) 88%, transparent);
+  }
+
+  .tool-modal {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 12px;
+    min-width: 0;
+  }
+
+  .tool-modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 10px 10px 9px;
+    background: var(--el-bg-color);
+    gap: 8px;
+  }
+
+  .tool-modal-title-wrap {
+    flex: 1 1 auto;
+  }
+
+  .tool-modal-title {
+    font-size: 12px;
+  }
+
+  .tool-modal-kicker {
+    display: none;
+  }
+
+  .modal-actions {
+    gap: 6px;
+  }
+
+  .modal-toggle-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .tool-modal-close {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .tool-modal-toolbar {
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .tool-search-input {
+    width: 100%;
+    height: 36px;
+  }
+
+  .tool-search-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .tool-search-count {
+    margin-right: auto;
+    text-align: left;
+  }
+
+  .tool-modal-content {
+    flex: 1 1 auto;
+  }
+
+  .tool-modal-body {
+    padding: 12px 10px 18px;
+    font-size: 12px;
+    line-height: 1.65;
   }
 }
 </style>

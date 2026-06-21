@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel
 
 _engine = None
@@ -9,7 +10,11 @@ _async_session_factory = None
 def get_async_engine(url: str = "sqlite+aiosqlite:///./lc_agent_data.db"):
     global _engine
     if _engine is None:
-        _engine = create_async_engine(url, echo=False)
+        engine_kwargs = {"echo": False}
+        if url.endswith(":memory:"):
+            engine_kwargs["poolclass"] = StaticPool
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+        _engine = create_async_engine(url, **engine_kwargs)
     return _engine
 
 

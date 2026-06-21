@@ -12,6 +12,12 @@ Run the unified restart script to build frontend and start the server.
 
 ## Quick Start
 
+### 禁止无脑重启python服务
+如果只修改了前端代码，不要无脑重启python服务。只需要npm run build编译前端。
+```powershell
+cd /d/codes/lc-agent/frontend && npm run build
+```
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File "D:\codes\lc-agent\.agents\skills\restart-bfzs\scripts\restart.ps1"
 # working_directory: D:\codes\lc-agent

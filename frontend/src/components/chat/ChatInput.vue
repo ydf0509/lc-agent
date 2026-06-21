@@ -13,6 +13,7 @@
       clearable
       auto-focus
       @submit="handleSubmit"
+      @cancel="handleStop"
     />
   </div>
 </template>
@@ -55,6 +56,10 @@ function handleSubmit() {
   if (!text.trim()) return
   emit('send', text.trim())
   senderRef.value?.clear()
+}
+
+function handleStop() {
+  emit('stop')
 }
 
 function handleCancelEdit() {
