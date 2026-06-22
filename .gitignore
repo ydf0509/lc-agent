@@ -233,3 +233,8 @@ frontend/.vite/
 frontend/auto-imports.d.ts
 frontend/components.d.ts
 tests_my/ai_tests/
+
+# Windows reserved device names
+nul
+.tmp_pytest/
+.tmp_pytest_run/
