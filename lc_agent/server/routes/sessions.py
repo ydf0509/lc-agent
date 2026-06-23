@@ -83,6 +83,7 @@ async def get_session_messages(
                 "content": msg.content,
                 "tool_calls": msg.tool_calls or [],
                 "usage": msg.usage,
+                "http_traces": msg.http_traces or [],
                 "created_at": msg.created_at.isoformat(),
             }
             for msg in ui_messages

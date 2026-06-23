@@ -20,6 +20,35 @@ export interface MessageUsage {
   totalDuration?: number
 }
 
+export interface HttpTraceMessagePart {
+  method?: string
+  url?: string
+  headers: Record<string, string>
+  body: string
+  bodyFormat?: 'json' | 'text' | 'empty' | 'unknown'
+}
+
+export interface HttpTraceResponsePart {
+  status?: number
+  headers: Record<string, string>
+  body: string
+  bodyFormat?: 'json' | 'text' | 'empty' | 'unknown'
+  ok?: boolean
+}
+
+export interface HttpTrace {
+  id: string
+  sequence: number
+  kind: 'llm_http'
+  provider?: string
+  model?: string
+  startedAt: number
+  durationMs?: number
+  request: HttpTraceMessagePart
+  response: HttpTraceResponsePart
+  error?: string | null
+}
+
 export interface ContentSegment {
   type: 'text' | 'tool'
   text?: string
@@ -35,6 +64,7 @@ export interface ChatMessage {
   segments?: ContentSegment[]
   isStreaming?: boolean
   usage?: MessageUsage
+  httpTraces?: HttpTrace[]
 }
 
 export interface ToolCall {
@@ -97,6 +127,38 @@ function normalizeHistoryUsage(rawUsage: any): MessageUsage | undefined {
   }
 }
 
+function normalizeHttpTrace(raw: any): HttpTrace {
+  return {
+    id: raw.id || createClientId(),
+    sequence: raw.sequence ?? 0,
+    kind: 'llm_http',
+    provider: raw.provider || undefined,
+    model: raw.model || undefined,
+    startedAt: raw.startedAt ?? raw.started_at ?? Date.now(),
+    durationMs: raw.durationMs ?? raw.duration_ms,
+    request: {
+      method: raw.request?.method || undefined,
+      url: raw.request?.url || undefined,
+      headers: raw.request?.headers || {},
+      body: raw.request?.body || '空',
+      bodyFormat: raw.request?.bodyFormat ?? raw.request?.body_format ?? 'unknown',
+    },
+    response: {
+      status: raw.response?.status,
+      headers: raw.response?.headers || {},
+      body: raw.response?.body || '未返回',
+      bodyFormat: raw.response?.bodyFormat ?? raw.response?.body_format ?? 'unknown',
+      ok: raw.response?.ok,
+    },
+    error: raw.error ?? null,
+  }
+}
+
+function normalizeHttpTraces(raw: any): HttpTrace[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  return raw.map(normalizeHttpTrace)
+}
+
 function normalizeHistoryMessage(msg: any): ChatMessage | null {
   const role = msg.role === 'human' ? 'user' : msg.role === 'ai' ? 'assistant' : msg.role
   if (!['user', 'assistant', 'tool'].includes(role)) return null
@@ -123,6 +185,7 @@ function normalizeHistoryMessage(msg: any): ChatMessage | null {
     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     usage,
+    httpTraces: normalizeHttpTraces(msg.http_traces || msg.httpTraces),
   }
 }
 
@@ -318,6 +381,7 @@ export const useChatStore = defineStore('chat', () => {
         if (usageData && usageData.length > 0 && last.usage) {
           mergeFinalUsageRounds(last.usage.rounds, usageData)
         }
+        last.httpTraces = normalizeHttpTraces((msg as any).http_traces || (msg as any).httpTraces)
       }
     })
 

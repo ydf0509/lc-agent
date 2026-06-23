@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
+from lc_agent.core.http_trace import get_http_trace_collector
+from lc_agent.core.http_trace_httpx import TracingAsyncClient
 from lc_agent.core.models import AgentPreset, ModelInfo
 from lc_agent.tools.registry import ToolRegistry
 
@@ -130,6 +132,18 @@ class AgentEngine:
         self._agents[cache_key or preset.id] = agent
         return agent
 
+    def _build_tracing_async_client(self, model_info: ModelInfo | None, model_id: str):
+        provider = model_info.provider if model_info else None
+        resolved_model = model_info.id if model_info else model_id
+        base_url = model_info.base_url if model_info and model_info.base_url else None
+        return TracingAsyncClient(
+            collector_getter=get_http_trace_collector,
+            provider=provider,
+            model=resolved_model,
+            base_url=base_url or "https://api.openai.com/v1",
+            timeout=120,
+        )
+
     def _create_llm(self, model_info: ModelInfo | None, model_id: str):
         """Create a chat model instance.
 
@@ -145,6 +159,7 @@ class AgentEngine:
                 api_key=model_info.api_key or "not-set",
                 temperature=0.7,
                 stream_usage=True,
+                http_async_client=self._build_tracing_async_client(model_info, model_id),
             )
 
         from langchain.chat_models import init_chat_model

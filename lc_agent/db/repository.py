@@ -111,6 +111,7 @@ class ChatUiMessageRepository:
         content: str = "",
         tool_calls: list[dict] | None = None,
         usage: dict | None = None,
+        http_traces: list[dict] | None = None,
     ) -> ChatUiMessage:
         message = ChatUiMessage(
             session_id=session_id,
@@ -118,6 +119,7 @@ class ChatUiMessageRepository:
             content=content,
             tool_calls=tool_calls,
             usage=usage,
+            http_traces=http_traces,
         )
         self.session.add(message)
         await self.session.commit()

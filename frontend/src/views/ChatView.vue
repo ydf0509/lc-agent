@@ -76,6 +76,10 @@
                     :collapsed="item.toolCalls[seg.toolIndex!]?.status === 'done'"
                   />
                 </div>
+                <HttpTraceBlock
+                  v-else-if="seg.type === 'http' && seg.httpIndex != null && item.httpTraces?.[seg.httpIndex]"
+                  :trace="item.httpTraces[seg.httpIndex]"
+                />
               </template>
             </template>
             <template v-else>
@@ -145,21 +149,23 @@ import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
 import { Cpu, User } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
-import type { ToolCall, MessageUsage, ReplayMessage } from '@/stores/chat'
+import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace, ChatMessage } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
 import ToolCallCard from '@/components/chat/ToolCallCard.vue'
+import HttpTraceBlock from '@/components/chat/HttpTraceBlock.vue'
 import TokenUsagePanel from '@/components/chat/TokenUsagePanel.vue'
 import MessageToolbar from '@/components/chat/MessageToolbar.vue'
 import CopyRoundsButton from '@/components/chat/CopyRoundsButton.vue'
 
 interface ContentSegment {
-  type: 'text' | 'thinking' | 'tool'
+  type: 'text' | 'thinking' | 'tool' | 'http'
   text?: string
   toolIndex?: number
+  httpIndex?: number
 }
 
 type ChatBubbleItem = BubbleListItemProps & {
@@ -172,6 +178,7 @@ type ChatBubbleItem = BubbleListItemProps & {
   hasThinking?: boolean
   hasToolCalls?: boolean
   hasAnswer?: boolean
+  httpTraces?: HttpTrace[]
 }
 
 const chatStore = useChatStore()
@@ -207,6 +214,7 @@ const bubbleList = computed((): ChatBubbleItem[] =>
         toolCalls: msg.toolCalls,
         usage: msg.usage,
         segments: segs,
+        httpTraces: msg.role === 'assistant' ? msg.httpTraces : undefined,
         hasThinking: segs?.some(s => s.type === 'thinking' && s.text?.trim()) ?? false,
         hasToolCalls: segs?.some(s => s.type === 'tool') ?? false,
         hasAnswer: segs?.some(s => s.type === 'text' && s.text?.trim()) ?? false,
@@ -263,7 +271,8 @@ function hasStructuredSegments(content: string, toolCalls?: ToolCall[]): boolean
   return Boolean(
     toolCalls?.length
     || content.includes('<!--THINK_START-->')
-    || content.includes('<!--THINK_END-->'),
+    || content.includes('<!--THINK_END-->')
+    || content.includes('<!--HTTP:'),
   )
 }
 
@@ -312,7 +321,7 @@ function getReplayHistory(beforeMessageId: string): ReplayMessage[] {
 
 function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[] {
   const segments: ContentSegment[] = []
-  const pattern = /<!--(?:TOOL:(\d+)|THINK_START|THINK_END)-->/g
+  const pattern = /<!--(?:TOOL:(\d+)|HTTP:(\d+)|THINK_START|THINK_END)-->/g
   let lastIndex = 0
   let match: RegExpExecArray | null
   let inThinking = false
@@ -335,6 +344,15 @@ function parseSegments(content: string, toolCalls?: ToolCall[]): ContentSegment[
         segments.push({ type: 'thinking', text: stripThinkingMarkers(textBefore) })
       }
       inThinking = false
+      lastIndex = match.index + match[0].length
+      continue
+    }
+
+    if (match[2] != null) {
+      if (textBefore) {
+        segments.push({ type: inThinking ? 'thinking' : 'text', text: stripThinkingMarkers(textBefore) })
+      }
+      segments.push({ type: 'http', httpIndex: parseInt(match[2], 10) })
       lastIndex = match.index + match[0].length
       continue
     }

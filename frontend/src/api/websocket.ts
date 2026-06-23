@@ -16,6 +16,7 @@ export interface WsMessage {
   cache_read_tokens?: number
   reasoning_tokens?: number
   usage?: any[]
+  http_traces?: any[]
 }
 
 export type WsEventHandler = (msg: WsMessage) => void

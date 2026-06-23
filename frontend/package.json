@@ -20,6 +20,8 @@
     "test:restart-bfzs": "node scripts/check-restart-bfzs-contract.mjs",
     "test:favicon": "node scripts/check-favicon-contract.mjs",
     "test:responsive": "node scripts/check-responsive-layout.mjs",
+    "test:chat-http-data": "node scripts/check-chat-http-data-contract.mjs",
+    "test:chat-http-ui": "node scripts/check-chat-http-ui-contract.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -48,4 +48,5 @@ class ChatUiMessage(SQLModel, table=True):
     content: str = ""
     tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     usage: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    http_traces: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utcnow)

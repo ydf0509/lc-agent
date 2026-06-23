@@ -7,6 +7,11 @@ from typing import Any
 from fastapi import WebSocket
 
 from lc_agent.core.engine import AgentEngine
+from lc_agent.core.http_trace import (
+    HttpTraceCollector,
+    bind_http_trace_collector,
+    reset_http_trace_collector,
+)
 
 
 class ChatWebSocketHandler:
@@ -75,36 +80,56 @@ class ChatWebSocketHandler:
                     stream_kwargs["model_id"] = model_id
                 if replace_from_message_id:
                     stream_kwargs["history"] = replay_history
-                stream = self.engine.chat_stream(content, thread_id, preset_id, **stream_kwargs)
-                async for event in stream:
-                    if self._cancel_flags.get(thread_id):
-                        await websocket.send_json({"type": "cancelled"})
-                        return
-                    assistant_in_thinking = self._accumulate_assistant_display_state(
-                        event,
-                        assistant_content_parts,
-                        assistant_tool_calls,
-                        assistant_in_thinking,
-                    )
-                    await self._send_event(websocket, event)
-                    prev_len = len(usage_rounds)
-                    self._accumulate_usage(event, usage_rounds)
-                    if len(usage_rounds) > prev_len:
-                        usage_rounds[-1]["duration_ms"] = int((time.time() - round_start_time) * 1000)
-                        round_start_time = time.time()
-                        await websocket.send_json({
-                            "type": "llm_usage",
-                            **usage_rounds[-1],
-                        })
+                model_info = self.engine._find_model(model_id) if model_id else None
+                provider = model_info.provider if model_info else None
+                resolved_model = model_info.id if model_info else model_id
+                trace_collector = HttpTraceCollector(provider=provider, model=resolved_model)
+                trace_token = bind_http_trace_collector(trace_collector)
+                try:
+                    stream = self.engine.chat_stream(content, thread_id, preset_id, **stream_kwargs)
+                    async for event in stream:
+                        if self._cancel_flags.get(thread_id):
+                            await websocket.send_json({"type": "cancelled"})
+                            return
+                        assistant_in_thinking = self._accumulate_assistant_display_state(
+                            event,
+                            assistant_content_parts,
+                            assistant_tool_calls,
+                            assistant_in_thinking,
+                        )
+                        await self._send_event(websocket, event)
+                        prev_len = len(usage_rounds)
+                        self._accumulate_usage(event, usage_rounds)
+                        if len(usage_rounds) > prev_len:
+                            usage_rounds[-1]["duration_ms"] = int((time.time() - round_start_time) * 1000)
+                            round_start_time = time.time()
+                            await websocket.send_json({
+                                "type": "llm_usage",
+                                **usage_rounds[-1],
+                            })
+                finally:
+                    reset_http_trace_collector(trace_token)
 
                 if assistant_in_thinking:
                     assistant_content_parts.append("<!--THINK_END-->")
                     assistant_in_thinking = False
 
+                http_traces = trace_collector.snapshot()
+                # Inject HTTP trace markers into assistant content for inline block rendering
+                if http_traces:
+                    for i in range(len(http_traces)):
+                        marker = f"\n<!--HTTP:{i}-->\n"
+                        assistant_content_parts.append(marker)
+                        await websocket.send_json({
+                            "type": "content",
+                            "content": marker,
+                        })
                 done_payload: dict = {"type": "done"}
                 if usage_rounds:
                     done_payload["usage"] = usage_rounds
-                if assistant_content_parts or assistant_tool_calls or usage_rounds:
+                if http_traces:
+                    done_payload["http_traces"] = http_traces
+                if assistant_content_parts or assistant_tool_calls or usage_rounds or http_traces:
                     await self._save_ui_message(
                         thread_id,
                         "assistant",
@@ -115,6 +140,7 @@ class ChatWebSocketHandler:
                             "tool_call_count": len(assistant_tool_calls),
                             "total_duration_ms": int((time.time() - stream_start_time) * 1000),
                         },
+                        http_traces=http_traces or None,
                     )
                 await websocket.send_json(done_payload)
 
@@ -245,6 +271,7 @@ class ChatWebSocketHandler:
         *,
         tool_calls: list[dict[str, Any]] | None = None,
         usage: dict[str, Any] | None = None,
+        http_traces: list[dict[str, Any]] | None = None,
     ):
         """Persist replay data for the web chat history."""
         try:
@@ -260,6 +287,7 @@ class ChatWebSocketHandler:
                     content=content,
                     tool_calls=tool_calls,
                     usage=usage,
+                    http_traces=http_traces,
                 )
             finally:
                 await session.close()

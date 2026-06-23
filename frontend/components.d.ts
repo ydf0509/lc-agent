@@ -33,6 +33,7 @@ declare module 'vue' {
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTag: typeof import('element-plus/es')['ElTag']
+    HttpTraceBlock: typeof import('./src/components/chat/HttpTraceBlock.vue')['default']
     InterruptDialog: typeof import('./src/components/chat/InterruptDialog.vue')['default']
     LeftSidebar: typeof import('./src/components/layout/LeftSidebar.vue')['default']
     MessageToolbar: typeof import('./src/components/chat/MessageToolbar.vue')['default']
