@@ -210,6 +210,7 @@ html:not(.dark) .markdown-body {
   max-width: 100%;
   margin: 0.95em 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--md-border);
   border-collapse: separate;
   border-spacing: 0;
@@ -224,6 +225,9 @@ html:not(.dark) .markdown-body {
   border-bottom: 1px solid var(--md-border-soft);
   text-align: left;
   vertical-align: top;
+  min-width: 3.5em;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .markdown-body table th:last-child,
@@ -244,6 +248,45 @@ html:not(.dark) .markdown-body {
 
 .markdown-body table tr:nth-child(2n) td {
   background: var(--md-softer);
+}
+
+/* Sticky first column */
+.markdown-body table th:first-child,
+.markdown-body table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.markdown-body table th:first-child {
+  background: color-mix(in srgb, var(--md-accent) 8%, var(--el-bg-color));
+}
+
+.markdown-body table td:first-child {
+  background: var(--el-bg-color);
+}
+
+.markdown-body table tr:nth-child(2n) td:first-child {
+  background: color-mix(in srgb, var(--el-bg-color) 97%, var(--md-border-soft));
+}
+
+.markdown-body table th:first-child::after,
+.markdown-body table td:first-child::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.05), transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.markdown-body table:hover th:first-child::after,
+.markdown-body table:hover td:first-child::after {
+  opacity: 1;
 }
 
 /* Inline code */
@@ -462,6 +505,15 @@ html:not(.dark) .markdown-body {
 
   .markdown-body h2 {
     font-size: 1.16em;
+  }
+
+  .markdown-body table {
+    font-size: 0.88em;
+  }
+
+  .markdown-body table th:first-child::after,
+  .markdown-body table td:first-child::after {
+    opacity: 1;
   }
 
   .markdown-code-toolbar {

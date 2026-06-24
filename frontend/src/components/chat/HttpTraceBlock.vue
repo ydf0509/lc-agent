@@ -330,6 +330,7 @@ const isRespBodyLong = computed(() => (props.trace.response.body?.length || 0) >
 }
 .http-summary-title {
   font-weight: 600;
+  white-space: nowrap;
 }
 .http-summary-tag {
   flex-shrink: 0;
@@ -642,6 +643,26 @@ const isRespBodyLong = computed(() => (props.trace.response.body?.length || 0) >
 }
 .http-modal-body :deep(.http-search-hit.is-active) {
   background: rgba(245, 158, 11, 0.78);
+}
+
+@media (max-width: 520px) {
+  .http-summary {
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    padding: 8px 10px;
+  }
+  .http-summary-title {
+    white-space: nowrap;
+  }
+  .http-summary-toggle {
+    order: 10;
+  }
+  .http-token-stats {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 2px;
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 520px) {
