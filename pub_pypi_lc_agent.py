@@ -15,7 +15,7 @@ t_end = time.time()
 print(f"build time: {t_end - t_start}")
 
 t_start = time.time()
-os.system(f'"{python}" -m twine upload dist/*')
+os.system(f'"{python}" -m twine upload dist/* --verbose')
 t_end = time.time()
 print(f"upload time: {t_end - t_start}")
 
