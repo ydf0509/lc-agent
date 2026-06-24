@@ -35,6 +35,8 @@
 
 ## 安装
 
+请注意安装包名字是`lc-agent-app`，不是`lc-agent`，因为`lc-agent`这个名字在pypi过不了审核。
+
 ```bash
 # 从 PyPI 安装
 pip install lc-agent-app
@@ -245,7 +247,7 @@ metadata:
 
 ### 有 RAG 知识库功能吗？
 
-通过 [nbrag](https://github.com/ydf0509/nbrag) MCP 实现 Agentic RAG。lc-agent 不重复造轮子，nbrag 远超 Dify 和 OpenWebUI 内置的知识库检索能力。
+通过 [nbrag](https://github.com/ydf0509/nbrag) MCP 实现 Agentic RAG。lc-agent 不重复造轮子，nbrag 吊打 Dify 和 OpenWebUI 内置的知识库检索能力。
 
 ## 开发
 
