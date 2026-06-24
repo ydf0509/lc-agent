@@ -1,9 +1,18 @@
 # lc-agent
 
 基于 LangChain / LangGraph 的 AI Agent 框架，内置 Web UI。lc-agent 既是框架又是产品。
-用户可以在自己项目导入lc-agent框架，使用langchain框架开发自己的具体的agent应用；用户也可以不写代码，直接在页面创建配置智能体。
+用户可以在自己项目导入lc-agent框架，使用langchain框架开发自己的具体的agent应用，页面能自动管理用户所有的langchain的agent对象(CompiledStateGraph类型的对象)；用户也可以不写代码，直接在页面创建配置智能体。
 
+## 技术栈
+
+lc-agent 的web 前端 使用vue + Element Plus X 框架。后端使用fastapi + asyncio + sqlmodel + langchain + langgraph + deepagents 框架。
+
+
+## 演示import lc-agent 框架开发自己的agent应用
 [lc-agent-bfzs](https://github.com/ydf0509/lc-agent-bfzs) 是基于lc-agent框架开发的自定义项目,是用于演示使用lc-agent框架的项目。
+
+lc_agent 是一个空壳框架，不自带 tools mcp skills 自定义agents，内置了3个agent。
+用户可以在页面创建agent，也可以用代码创建agent。
 
 ## 定位
 
