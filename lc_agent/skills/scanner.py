@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,13 +31,19 @@ class SkillScanner:
         self.directories = [Path(d) for d in directories]
         self._skills: list[SkillInfo] = []
         self._disabled_skills: set[str] = set()
+        self._content_hash: str = ""
+        self.generation: int = 0
 
     @property
     def skills(self) -> list[SkillInfo]:
         return self._skills
 
     def scan(self) -> list[SkillInfo]:
-        """Scan all directories recursively for SKILL.md files."""
+        """Scan all directories recursively for SKILL.md files.
+
+        Increments ``generation`` whenever the scanned content differs from
+        the previous scan, so callers can cheaply detect changes.
+        """
         self._skills = []
         seen_names: set[str] = set()
 
@@ -48,6 +55,13 @@ class SkillScanner:
                 if skill and skill.name not in seen_names:
                     self._skills.append(skill)
                     seen_names.add(skill.name)
+
+        new_hash = hashlib.md5(
+            "|".join(f"{s.name}:{s.content}" for s in self._skills).encode()
+        ).hexdigest()
+        if new_hash != self._content_hash:
+            self._content_hash = new_hash
+            self.generation += 1
 
         return self._skills
 

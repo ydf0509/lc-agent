@@ -244,6 +244,11 @@ function mergeFinalUsageRounds(targetRounds: LlmRoundUsage[], rawRounds: any[]) 
   })
 }
 
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const isStreaming = ref(false)
@@ -251,6 +256,7 @@ export const useChatStore = defineStore('chat', () => {
   const threadId = ref<string | null>(null)
   const interrupt = ref<InterruptInfo | null>(null)
   const ws = ref<ChatWebSocket | null>(null)
+  const todos = ref<TodoItem[]>([])
 
   const lastMessage = computed(() => messages.value[messages.value.length - 1])
 
@@ -441,6 +447,10 @@ export const useChatStore = defineStore('chat', () => {
       }
     })
 
+    ws.value.on('todos', (msg: WsMessage) => {
+      todos.value = ((msg as any).todos || []) as TodoItem[]
+    })
+
     try {
       const tid = await ws.value.connect(existingThreadId)
       threadId.value = tid
@@ -518,6 +528,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function clearMessages() {
     messages.value = []
+    todos.value = []
   }
 
   function truncateAfterMessage(messageId: string) {
@@ -531,6 +542,7 @@ export const useChatStore = defineStore('chat', () => {
     isConnected.value = false
     isStreaming.value = false
     threadId.value = null
+    todos.value = []
   }
 
   return {
@@ -540,6 +552,7 @@ export const useChatStore = defineStore('chat', () => {
     threadId,
     interrupt,
     lastMessage,
+    todos,
     connect,
     loadMessages,
     sendMessage,

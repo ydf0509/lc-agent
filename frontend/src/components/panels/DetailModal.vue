@@ -147,16 +147,14 @@ function buildMcpHtml(data: any, query: string): string {
 
 function buildSkillHtml(data: any, query: string): string {
   let html = ''
-  if (data.file_path) {
-    html += `<div class="detail-file-path">${highlightText(data.file_path, query)}</div>`
-  }
   if (data.description) {
     html += `<div class="detail-section-desc">${highlightText(data.description, query)}</div>`
   }
-  if (data.content) {
-    const mdHtml = renderMarkdown(data.content)
+  const body = data.body || data.content
+  if (body) {
+    const mdHtml = renderMarkdown(body)
     if (query) {
-      const highlighted = data.content.replace(
+      const highlighted = body.replace(
         new RegExp(escapeRegExp(query), 'gi'),
         (match: string) => `@@HIT_START@@${match}@@HIT_END@@`,
       )
@@ -167,6 +165,8 @@ function buildSkillHtml(data: any, query: string): string {
     } else {
       html += `<div class="detail-skill-content markdown-body">${mdHtml}</div>`
     }
+  } else {
+    html += `<div class="detail-section-desc" style="color:var(--el-text-color-secondary)">暂无详细内容</div>`
   }
   return html
 }
@@ -205,7 +205,7 @@ const searchableText = computed(() => {
       return parts.join('\n')
     }
     case 'skill': {
-      return [props.data.file_path || '', props.data.description || '', props.data.content || ''].join('\n')
+      return [props.data.description || '', props.data.body || ''].join('\n')
     }
     default:
       return ''

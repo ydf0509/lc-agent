@@ -162,7 +162,11 @@ class ChatWebSocketHandler:
                         self._generate_and_push_title(websocket, thread_id, content, preset_id, model_id)
                     )
             except Exception as e:
-                await websocket.send_json({"type": "error", "message": str(e)})
+                print(f"[WS] handle_message error: {e}")
+                try:
+                    await websocket.send_json({"type": "error", "message": str(e)})
+                except Exception:
+                    pass
 
         elif msg_type == "interrupt_response":
             approved = data.get("approved", False)
@@ -176,7 +180,7 @@ class ChatWebSocketHandler:
                     await websocket.send_json({"type": "error", "message": "No agent found for resume"})
                     return
 
-                config = {"configurable": {"thread_id": thread_id}}
+                config = {"configurable": {"thread_id": thread_id}, "recursion_limit": self.engine.recursion_limit}
                 resume_value = {"approved": approved}
 
                 async for event in agent.astream_events(
@@ -458,20 +462,29 @@ class ChatWebSocketHandler:
                     await websocket.send_json({"type": "token", "content": chunk.content})
 
         elif kind == "on_tool_start":
+            tool_name = event.get("name", "")
             tool_input = event.get("data", {}).get("input", {})
-            await websocket.send_json({
-                "type": "tool_call",
-                "name": event.get("name", ""),
-                "run_id": event.get("run_id", ""),
-                "args": tool_input,
-            })
+
+            if tool_name == "write_todos" and isinstance(tool_input, dict):
+                todos = tool_input.get("todos", [])
+                await websocket.send_json({"type": "todos", "todos": todos})
+            else:
+                await websocket.send_json({
+                    "type": "tool_call",
+                    "name": tool_name,
+                    "run_id": event.get("run_id", ""),
+                    "args": tool_input,
+                })
 
         elif kind == "on_tool_end":
+            tool_name = event.get("name", "")
+            if tool_name == "write_todos":
+                return
             output = event.get("data", {}).get("output", "")
             result_str = str(output)
             await websocket.send_json({
                 "type": "tool_result",
-                "name": event.get("name", ""),
+                "name": tool_name,
                 "result": result_str,
             })
 

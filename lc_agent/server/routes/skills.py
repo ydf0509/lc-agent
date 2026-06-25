@@ -1,63 +1,85 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from langchain_agentskills import SkillsToolkit
+
+from lc_agent.skills.filtered_loader import FilteredSkillLoader
+
 router = APIRouter(tags=["skills"])
+
+
+def _get_toolkit(request: Request) -> SkillsToolkit | None:
+    return getattr(request.app.state, "skills_toolkit", None)
+
+
+def _get_loader(request: Request) -> FilteredSkillLoader | None:
+    return getattr(request.app.state, "filtered_loader", None)
 
 
 @router.get("/skills")
 def list_skills(request: Request):
-    """List discovered skills."""
-    scanner = getattr(request.app.state, "skill_scanner", None)
-    if scanner is None:
+    """List all skills with their enabled state (tier 1 metadata)."""
+    loader = _get_loader(request)
+    if loader is None:
         return []
+    all_skills = loader.list_all_skills()
     return [
         {
             "name": s.name,
             "description": s.description,
-            "group": s.group,
-            "file_path": s.file_path,
-            "content": s.content,
-            "enabled": s.name not in scanner._disabled_skills,
+            "source": s.source,
+            "metadata": s.metadata,
+            "enabled": s.name not in loader.disabled_skills,
         }
-        for s in scanner.skills
+        for s in all_skills
     ]
 
 
 @router.post("/skills/{name}/toggle")
 def toggle_skill(name: str, request: Request):
     """Toggle a skill's enabled state at runtime."""
-    scanner = getattr(request.app.state, "skill_scanner", None)
-    if scanner is None:
-        raise HTTPException(status_code=404, detail="Skill scanner not found")
-    skill = next((s for s in scanner.skills if s.name == name), None)
-    if skill is None:
+    loader = _get_loader(request)
+    if loader is None:
+        raise HTTPException(status_code=404, detail="Skills not configured")
+    all_names = {s.name for s in loader.list_all_skills()}
+    if name not in all_names:
         raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
-    if name in scanner._disabled_skills:
-        scanner._disabled_skills.discard(name)
-        enabled = True
-    else:
-        scanner._disabled_skills.add(name)
-        enabled = False
+    enabled = loader.toggle(name)
     engine = getattr(request.app.state, "engine", None)
     if engine:
         engine._mcp_generation += 1
     return {"name": name, "enabled": enabled}
 
 
-@router.get("/skills/groups")
-def list_skill_groups(request: Request):
-    """List skills grouped by their metadata.group field."""
-    scanner = getattr(request.app.state, "skill_scanner", None)
-    if scanner is None:
-        return []
+@router.get("/skills/{name}")
+def get_skill(name: str, request: Request):
+    """Load a skill's full content (tier 2)."""
+    loader = _get_loader(request)
+    if loader is None:
+        raise HTTPException(status_code=404, detail="Skills not configured")
+    try:
+        skill = loader.load_skill(name)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+    return {
+        "name": skill.metadata.name,
+        "description": skill.metadata.description,
+        "body": skill.body,
+        "resources": skill.resources,
+        "scripts": skill.scripts,
+    }
 
-    groups: dict[str, list] = {}
-    for s in scanner.skills:
-        group_name = s.group or "__ungrouped__"
-        if group_name not in groups:
-            groups[group_name] = []
-        groups[group_name].append({"name": s.name, "description": s.description})
 
-    return [
-        {"group": g, "skills": skills}
-        for g, skills in sorted(groups.items())
-    ]
+@router.get("/skills/{name}/resources/{resource_name:path}")
+def read_skill_resource(name: str, resource_name: str, request: Request):
+    """Read a skill resource file (tier 3)."""
+    loader = _get_loader(request)
+    if loader is None:
+        raise HTTPException(status_code=404, detail="Skills not configured")
+    try:
+        content = loader.read_resource(name, resource_name)
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Resource '{resource_name}' not found in skill '{name}'",
+        )
+    return {"skill": name, "resource": resource_name, "content": content}

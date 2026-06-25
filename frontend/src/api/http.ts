@@ -24,6 +24,7 @@ export const api = {
   getMcpServers: () => fetchApi<any[]>('/mcp'),
   toggleMcpServer: (name: string) => fetchApi<{ name: string; enabled: boolean }>(`/mcp/${name}/toggle`, { method: 'POST' }),
   getSkills: () => fetchApi<any[]>('/skills'),
+  getSkillDetail: (name: string) => fetchApi<any>(`/skills/${name}`),
   toggleSkill: (name: string) => fetchApi<{ name: string; enabled: boolean }>(`/skills/${name}/toggle`, { method: 'POST' }),
 
   getAgents: () => fetchApi<any[]>('/agents'),

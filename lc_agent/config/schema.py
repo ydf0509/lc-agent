@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 class ModelConfig(BaseModel):
     id: str
     context_limit: int = 8000
-    max_output_tokens: int = 0
+    max_output_tokens: int = 65536
 
 
 class ProviderConfig(BaseModel):
@@ -35,6 +35,7 @@ class AppConfig(BaseModel):
         "system_prompt": "You are a helpful assistant.",
         "default_model": "",
         "streaming": True,
+        "recursion_limit": 100,
     })
     mcp: dict = Field(default_factory=dict)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)

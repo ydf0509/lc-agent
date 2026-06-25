@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from langchain_agentskills import SkillsToolkit
+from langchain_agentskills.loaders import CompositeSkillLoader, DirectorySkillLoader
 
 from lc_agent.core.engine import AgentEngine
 from lc_agent.db.engine import init_db
+from lc_agent.mcp.manager import McpManager
 from lc_agent.server.app import create_app, mount_static_files
 from lc_agent.server.websocket import ChatWebSocketHandler
+from lc_agent.skills.filtered_loader import FilteredSkillLoader
 
 
 class LcAgentApp:
@@ -22,17 +27,23 @@ class LcAgentApp:
         self._db_url = config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
         self._checkpoint_path = config.get("database", {}).get("checkpoint_path", "./lc_agent_checkpoints.db")
         self.engine = AgentEngine(config)
-        from lc_agent.skills.scanner import SkillScanner
         skills_dirs = config.get("skills", ["./skills"])
-        self.skill_scanner = SkillScanner(skills_dirs)
-        self.skill_scanner.scan()
-        from lc_agent.mcp.manager import McpManager
+        existing_dirs = [d for d in skills_dirs if Path(d).is_dir()]
+        if existing_dirs:
+            inner_loaders = [DirectorySkillLoader(d) for d in existing_dirs]
+            inner = inner_loaders[0] if len(inner_loaders) == 1 else CompositeSkillLoader(inner_loaders)
+            self.filtered_loader = FilteredSkillLoader(inner)
+            self.skills_toolkit = SkillsToolkit(loaders=[self.filtered_loader])
+        else:
+            self.filtered_loader = None
+            self.skills_toolkit = None
         mcp_config = config.get("mcp_servers", {})
         self.mcp_manager = McpManager(mcp_config, on_state_change=self._on_mcp_state_change)
         self.fastapi_app = create_app(config, lifespan=self._lifespan)
         self.fastapi_app.state.mcp_manager = self.mcp_manager
-        self.fastapi_app.state.skill_scanner = self.skill_scanner
-        self.engine._skill_scanner = self.skill_scanner
+        self.fastapi_app.state.skills_toolkit = self.skills_toolkit
+        self.fastapi_app.state.filtered_loader = self.filtered_loader
+        self.engine._skills_toolkit = self.skills_toolkit
         self.engine._mcp_manager = self.mcp_manager
         self.fastapi_app.state.engine = self.engine
         self._ws_handler = ChatWebSocketHandler(self.engine, db_url=self._db_url)

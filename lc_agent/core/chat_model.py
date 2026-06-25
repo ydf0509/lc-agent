@@ -8,6 +8,8 @@ delta for chain-of-thought / thinking content. This subclass captures it into
 
 from __future__ import annotations
 
+from typing import Any
+
 from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
@@ -19,7 +21,30 @@ class ChatOpenAIReasoning(ChatOpenAI):
     Drop-in replacement for ChatOpenAI. Works with any provider that returns
     `reasoning_content` or `reasoning` in the streaming delta dict (e.g.
     DeepSeek, GLM with thinking mode, OpenRouter).
+
+    Also fixes the max_tokens → max_completion_tokens rename that ChatOpenAI
+    applies for the OpenAI API — non-OpenAI providers (DeepSeek, GLM, etc.)
+    still expect `max_tokens`.
     """
+
+    @property
+    def _default_params(self) -> dict[str, Any]:
+        params = super()._default_params
+        if "max_completion_tokens" in params:
+            params["max_tokens"] = params["max_completion_tokens"]
+        return params
+
+    def _get_request_payload(
+        self,
+        input_: Any,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict:
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        if "max_completion_tokens" in payload:
+            payload["max_tokens"] = payload["max_completion_tokens"]
+        return payload
 
     def _convert_chunk_to_generation_chunk(
         self,

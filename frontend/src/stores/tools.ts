@@ -38,8 +38,8 @@ export interface McpServer {
 export interface Skill {
   name: string
   description: string
-  content?: string
-  file_path?: string
+  source?: string
+  metadata?: Record<string, any>
   enabled: boolean
 }
 

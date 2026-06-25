@@ -1,95 +1,103 @@
 <template>
   <aside class="right-panel">
-    <div class="panel-section">
-      <h4>模型</h4>
-      <ModelSelector
-        :models="toolsStore.models"
-        :current-model="toolsStore.currentModel"
-        @change="toolsStore.setModel"
-      />
-    </div>
-
-    <template v-if="!agentsStore.isChatAgent">
+    <div class="right-panel-fixed">
       <div class="panel-section">
-        <h4>工具</h4>
-        <ToolGroupPanel
-          :groups="toolsStore.filteredGroups"
-          @toggle="toolsStore.toggleGroup"
-          @detail="(group) => openDetail('tool-group', group.description || group.id, group)"
+        <h4>模型</h4>
+        <ModelSelector
+          :models="toolsStore.models"
+          :current-model="toolsStore.currentModel"
+          @change="toolsStore.setModel"
         />
       </div>
 
-      <div class="panel-section">
-        <h4>MCP 服务器</h4>
-        <div v-for="server in toolsStore.filteredMcp" :key="server.name" class="mcp-item" :class="{ 'not-allowed': !server.allowed }">
-          <div class="mcp-header">
-            <div class="mcp-left">
-              <el-switch
-                :model-value="server.enabled"
-                :disabled="!server.allowed"
-                size="small"
-                @change="toolsStore.toggleMcp(server.name)"
-              />
-              <span class="mcp-name">{{ server.name }}</span>
-              <button class="detail-btn" type="button" @click="openDetail('mcp', server.name, server)">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              详情
-            </button>
-            </div>
-            <el-tag size="small" :type="!server.allowed ? 'warning' : server.status === 'connected' ? 'success' : server.status === 'error' ? 'danger' : server.status === 'disabled' ? 'warning' : 'info'">
-              {{ !server.allowed ? '未授权' : server.status === 'connected' ? '已连接' : server.status === 'error' ? '错误' : server.status === 'disabled' ? '已禁用' : '未连接' }}
-            </el-tag>
-          </div>
-          <div v-if="server.error && server.allowed" class="mcp-error">{{ server.error }}</div>
-          <div v-if="server.tools && server.tools.length && server.allowed" class="mcp-tools">
-            <el-tag v-for="tool in server.tools.slice(0, 5)" :key="tool" size="small" :class="server.enabled ? 'tool-tag-enabled' : 'tool-tag-disabled'">{{ tool }}</el-tag>
-            <el-tag v-if="server.tools.length > 5" size="small" :class="server.enabled ? 'tool-tag-enabled' : 'tool-tag-disabled'">+{{ server.tools.length - 5 }}</el-tag>
-          </div>
-        </div>
-        <p v-if="!toolsStore.mcpServers.length" class="empty-hint">暂无 MCP 服务器</p>
-      </div>
-
-      <div class="panel-section">
-        <h4>Skills</h4>
-        <div v-for="skill in toolsStore.filteredSkills" :key="skill.name" class="skill-item" :class="{ 'not-allowed': !skill.allowed, 'skill-disabled': !skill.enabled }">
-          <div class="skill-header">
-            <el-switch
-              :model-value="skill.enabled"
-              :disabled="!skill.allowed"
-              size="small"
-              @change="toolsStore.toggleSkill(skill.name)"
-            />
-            <span class="skill-name" :class="{ dimmed: !skill.enabled }">{{ skill.name }}</span>
-            <button class="detail-btn" type="button" @click="openDetail('skill', skill.name, skill)">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              详情
-            </button>
-          </div>
-          <span class="skill-desc">{{ skill.description }}</span>
-        </div>
-        <p v-if="!toolsStore.skills.length" class="empty-hint">暂无 Skills</p>
-      </div>
-    </template>
-
-    <div v-if="agentsStore.isChatAgent" class="panel-section chat-only-hint">
-      <div class="hint-box">
-        <span class="hint-icon">💬</span>
-        <span class="hint-text">Chat 模式：纯对话，无工具</span>
-        <span class="hint-sub">切换至 Empty 或 Power 智能体以启用工具</span>
+      <div v-if="chatStore.todos.length > 0" class="panel-section">
+        <TodoList :todos="chatStore.todos" />
       </div>
     </div>
 
-    <div class="panel-section status-section">
-      <h4>状态</h4>
-      <div class="status-item">
-        <span>连接:</span>
-        <el-tag :type="chatStore.isConnected ? 'success' : 'warning'" size="small">
-          {{ chatStore.isConnected ? '已连接' : '待连接' }}
-        </el-tag>
+    <div class="right-panel-scroll">
+      <template v-if="!agentsStore.isChatAgent">
+        <div class="panel-section">
+          <h4>工具</h4>
+          <ToolGroupPanel
+            :groups="toolsStore.filteredGroups"
+            @toggle="toolsStore.toggleGroup"
+            @detail="(group) => openDetail('tool-group', group.description || group.id, group)"
+          />
+        </div>
+
+        <div class="panel-section">
+          <h4>MCP 服务器</h4>
+          <div v-for="server in toolsStore.filteredMcp" :key="server.name" class="mcp-item" :class="{ 'not-allowed': !server.allowed }">
+            <div class="mcp-header">
+              <div class="mcp-left">
+                <el-switch
+                  :model-value="server.enabled"
+                  :disabled="!server.allowed"
+                  size="small"
+                  @change="toolsStore.toggleMcp(server.name)"
+                />
+                <span class="mcp-name">{{ server.name }}</span>
+                <button class="detail-btn" type="button" @click="openDetail('mcp', server.name, server)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                详情
+              </button>
+              </div>
+              <el-tag size="small" :type="!server.allowed ? 'warning' : server.status === 'connected' ? 'success' : server.status === 'error' ? 'danger' : server.status === 'disabled' ? 'warning' : 'info'">
+                {{ !server.allowed ? '未授权' : server.status === 'connected' ? '已连接' : server.status === 'error' ? '错误' : server.status === 'disabled' ? '已禁用' : '未连接' }}
+              </el-tag>
+            </div>
+            <div v-if="server.error && server.allowed" class="mcp-error">{{ server.error }}</div>
+            <div v-if="server.tools && server.tools.length && server.allowed" class="mcp-tools">
+              <el-tag v-for="tool in server.tools.slice(0, 5)" :key="tool" size="small" :class="server.enabled ? 'tool-tag-enabled' : 'tool-tag-disabled'">{{ tool }}</el-tag>
+              <el-tag v-if="server.tools.length > 5" size="small" :class="server.enabled ? 'tool-tag-enabled' : 'tool-tag-disabled'">+{{ server.tools.length - 5 }}</el-tag>
+            </div>
+          </div>
+          <p v-if="!toolsStore.mcpServers.length" class="empty-hint">暂无 MCP 服务器</p>
+        </div>
+
+        <div class="panel-section">
+          <h4>Skills</h4>
+          <div v-for="skill in toolsStore.filteredSkills" :key="skill.name" class="skill-item" :class="{ 'not-allowed': !skill.allowed, 'skill-disabled': !skill.enabled }">
+            <div class="skill-header">
+              <el-switch
+                :model-value="skill.enabled"
+                :disabled="!skill.allowed"
+                size="small"
+                @change="toolsStore.toggleSkill(skill.name)"
+              />
+              <span class="skill-name" :class="{ dimmed: !skill.enabled }">{{ skill.name }}</span>
+              <button class="detail-btn" type="button" @click="openDetail('skill', skill.name, skill)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                详情
+              </button>
+            </div>
+            <span class="skill-desc">{{ skill.description }}</span>
+          </div>
+          <p v-if="!toolsStore.skills.length" class="empty-hint">暂无 Skills</p>
+        </div>
+      </template>
+
+      <div v-if="agentsStore.isChatAgent" class="panel-section chat-only-hint">
+        <div class="hint-box">
+          <span class="hint-icon">💬</span>
+          <span class="hint-text">Chat 模式：纯对话，无工具</span>
+          <span class="hint-sub">切换至 Empty 或 Power 智能体以启用工具</span>
+        </div>
       </div>
-      <div v-if="chatStore.threadId" class="status-item">
-        <span>Thread:</span>
-        <code>{{ chatStore.threadId.slice(0, 8) }}...</code>
+
+      <div class="panel-section status-section">
+        <h4>状态</h4>
+        <div class="status-item">
+          <span>连接:</span>
+          <el-tag :type="chatStore.isConnected ? 'success' : 'warning'" size="small">
+            {{ chatStore.isConnected ? '已连接' : '待连接' }}
+          </el-tag>
+        </div>
+        <div v-if="chatStore.threadId" class="status-item">
+          <span>Thread:</span>
+          <code>{{ chatStore.threadId.slice(0, 8) }}...</code>
+        </div>
       </div>
     </div>
 
@@ -105,11 +113,13 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
 import { useToolsStore } from '@/stores/tools'
+import { api } from '@/api/http'
 import { useChatStore } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import ModelSelector from '@/components/panels/ModelSelector.vue'
 import ToolGroupPanel from '@/components/panels/ToolGroupPanel.vue'
 import DetailModal from '@/components/panels/DetailModal.vue'
+import TodoList from '@/components/panels/TodoList.vue'
 
 const toolsStore = useToolsStore()
 const chatStore = useChatStore()
@@ -127,21 +137,42 @@ const detailModal = reactive<{
   data: null,
 })
 
-function openDetail(mode: 'tool-group' | 'mcp' | 'skill', title: string, data: any) {
+async function openDetail(mode: 'tool-group' | 'mcp' | 'skill', title: string, data: any) {
   detailModal.mode = mode
   detailModal.title = title
-  detailModal.data = data
+  if (mode === 'skill' && data?.name && !data.body) {
+    try {
+      const detail = await api.getSkillDetail(data.name)
+      detailModal.data = { ...data, ...detail }
+    } catch {
+      detailModal.data = data
+    }
+  } else {
+    detailModal.data = data
+  }
   detailModal.visible = true
 }
 </script>
 
 <style scoped>
 .right-panel {
-  width: 450px;
+  width: 350px;
   background: var(--el-bg-color);
   border-left: 1px solid var(--el-border-color);
-  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-panel-fixed {
+  flex-shrink: 0;
+  padding: 16px 16px 0;
+}
+
+.right-panel-scroll {
+  flex: 1;
   overflow-y: auto;
+  padding: 0 16px 16px;
 }
 
 .panel-section {

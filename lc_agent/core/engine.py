@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator
 
+from langchain.agents.middleware import TodoListMiddleware
+
 from lc_agent.core.http_trace import get_http_trace_collector
 from lc_agent.core.http_trace_httpx import TracingAsyncClient
 from lc_agent.core.models import AgentPreset, ModelInfo
@@ -23,6 +25,7 @@ class AgentEngine:
         self._custom_presets: dict[str, AgentPreset] = {}
         self._agent_mcp_gen: dict[str, int] = {}
         self._mcp_generation: int = 0
+        self.recursion_limit: int = config.get("agent", {}).get("recursion_limit", 100)
 
     def _parse_models(self, config: dict) -> list[ModelInfo]:
         """Extract ModelInfo list from config."""
@@ -97,15 +100,32 @@ class AgentEngine:
         self._current_preset = preset
 
         system_prompt = preset.system_prompt
-        if hasattr(self, '_skill_scanner') and self._skill_scanner:
-            enabled_skills = self._skill_scanner.get_filtered(preset.allowed_skills)
-            if enabled_skills:
-                skills_text = "\n\n---\n\n".join(
-                    f"## Skill: {s.name}\n\n{s.content}" for s in enabled_skills
-                )
-                system_prompt = f"{system_prompt}\n\n# Available Skills\n\n{skills_text}"
-
         tools = self.tool_registry.get_filtered_tools(preset.allowed_tool_groups)
+
+        if hasattr(self, '_skills_toolkit') and self._skills_toolkit:
+            allowed = preset.allowed_skills
+            if allowed is None or allowed:
+                skill_tools = [
+                    t for t in self._skills_toolkit.get_tools()
+                    if t.name != "list_skills"
+                ]
+                tools = tools + skill_tools
+                loader = self._skills_toolkit._resolved_loader
+                if loader:
+                    all_skills = loader.list_skills()
+                    if allowed is not None:
+                        all_skills = [s for s in all_skills if s.name in allowed]
+                    if all_skills:
+                        lines = ["# Available Skills", ""]
+                        for s in all_skills:
+                            lines.append(f"- **{s.name}**: {s.description}")
+                        lines.append("")
+                        lines.append(
+                            "Use `load_skill` to get full instructions for a skill, "
+                            "`read_skill_resource` to read its resources, "
+                            "and `run_skill_script` to execute its scripts."
+                        )
+                        system_prompt = f"{system_prompt}\n\n" + "\n".join(lines)
 
         if hasattr(self, '_mcp_manager') and self._mcp_manager:
             mcp_tools = self._mcp_manager.get_filtered_langchain_tools(preset.allowed_mcp_servers)
@@ -123,10 +143,13 @@ class AgentEngine:
         if preset.dangerous_tools:
             kwargs["interrupt_before"] = ["tools"]
 
+        middleware = [TodoListMiddleware()]
+
         agent = create_agent(
             model=llm,
             tools=tools,
             system_prompt=system_prompt,
+            middleware=middleware,
             **kwargs,
         )
 
@@ -238,7 +261,7 @@ class AgentEngine:
         """Send a message and get a response (non-streaming)."""
         agent = self._get_or_build_agent(preset_id, model_id)
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": self.recursion_limit}
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": message}]},
             config=config,
@@ -259,7 +282,7 @@ class AgentEngine:
         """Stream chat responses as events."""
         agent = self._get_or_build_agent(preset_id, model_id)
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": self.recursion_limit}
         input_messages = list(history or [])
         input_messages.append({"role": "user", "content": message})
         async for event in agent.astream_events(
