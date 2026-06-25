@@ -117,6 +117,7 @@ function handleCancelEdit() {
 
 .chat-input-wrapper :deep(.chat-rich-text) {
   background: transparent !important;
+  max-height: 40vh;
 }
 
 .chat-input-wrapper :deep([contenteditable="true"]) {

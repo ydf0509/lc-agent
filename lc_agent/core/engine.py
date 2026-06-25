@@ -35,6 +35,7 @@ class AgentEngine:
                         provider=provider_name,
                         base_url=provider_conf.get("base_url", ""),
                         context_limit=model_conf.get("context_limit", 8000),
+                        max_output_tokens=model_conf.get("max_output_tokens", 0),
                         api_key=provider_conf.get("api_key", ""),
                     ))
         return models
@@ -153,7 +154,7 @@ class AgentEngine:
         """
         if model_info and model_info.base_url:
             from lc_agent.core.chat_model import ChatOpenAIReasoning
-            return ChatOpenAIReasoning(
+            kwargs: dict[str, Any] = dict(
                 model=model_info.id,
                 base_url=model_info.base_url,
                 api_key=model_info.api_key or "not-set",
@@ -161,6 +162,9 @@ class AgentEngine:
                 stream_usage=True,
                 http_async_client=self._build_tracing_async_client(model_info, model_id),
             )
+            if model_info.max_output_tokens > 0:
+                kwargs["max_tokens"] = model_info.max_output_tokens
+            return ChatOpenAIReasoning(**kwargs)
 
         from langchain.chat_models import init_chat_model
 

@@ -233,12 +233,33 @@ metadata:
 | 数据库 | SQLite（aiosqlite）+ LangGraph Checkpoint |
 | 通信 | WebSocket（流式）+ REST API |
 
+## 与 OpenWebUI 的区别
+
+lc-agent 的下限是 OpenWebUI（内置 Chat 预设，配好 API Key 即可聊天），上限是 LangSmith + Dify（框架级开发调试）。
+
+| 对比维度 | OpenWebUI | lc-agent |
+|----------|-----------|----------|
+| 纯聊天 | 支持 | 支持（内置 Chat 预设） |
+| 多用户/团队/权限 | 支持 | 单用户（开发调试场景） |
+| 内置 RAG 拖拽上传 | 支持 | 通过 nbrag MCP 实现（更强但需配置） |
+| 多模态（TTS/语音/图片生成） | 支持 | 不做（非 Agent 开发核心需求） |
+| HTTP 追踪（request/response 全文） | 无 | 内置，自动脱敏 |
+| Token 逐轮统计（含 cache/reasoning） | 无 | 内置面板 |
+| 工具调用可视化（入参/耗时/返回值） | 简单 | 详细卡片 + 全屏查看 + 搜索 |
+| `import` 框架级使用 | 不支持 | 核心能力 |
+| MCP 原生支持 | 不支持 | stdio/SSE/HTTP 三传输 |
+| 代码注册自定义 Agent | 不支持 | `app.add_agent()` |
+| 运行时热切换模型/工具/MCP | 部分 | 全部支持，无需重启 |
+| LangChain 生态原生 | 不相关 | 原生集成 |
+
+**总结**：不写代码只想聊天 → 两者都行；要开发/调试/部署 LangChain Agent → lc-agent。
+
 ## 自问自答
 
 ### lc-agent 能做什么？
 
 - 当做 OpenWebUI / PrivateGPT 使用：配 API Key 聊天
-- 当做 Codex / Claude Code 使用：配置 MCP 和 Skills 获得工具调用能力。如果你要实现ai coding编程，推荐配置 serena 这个mcp，一站式搞定索引代码、读代码、写代码、改代码、执行代码，无需自己亲自吃苦实现编程能力。
+- 当做 Codex / Claude Code 使用：配置 MCP 和 Skills 获得工具调用能力
 - 当做 LangChain Agent 管理界面：热切换模型/工具/MCP，比改代码重启强得多
 
 ### 比一般 LLM 网页聊天有什么优势？
@@ -247,7 +268,7 @@ metadata:
 
 ### 有 RAG 知识库功能吗？
 
-通过 [nbrag](https://github.com/ydf0509/nbrag) MCP 实现 Agentic RAG。lc-agent 不重复造轮子，nbrag 吊打 Dify 和 OpenWebUI 内置的知识库检索能力。
+通过 [nbrag](https://github.com/ydf0509/nbrag) MCP 实现 Agentic RAG。lc-agent 不重复造轮子，nbrag 远超 Dify 和 OpenWebUI 内置的知识库检索能力。
 
 ## 开发
 

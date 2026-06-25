@@ -89,7 +89,7 @@
                 class="markdown-body"
                 v-html="renderMarkdown(stripThinkingMarkers(item.content || ''))"
               />
-              <span v-else>{{ item.content }}</span>
+              <span v-else class="user-plain-text">{{ item.content }}</span>
             </template>
             <div
               v-if="shouldShowReasoningNotice(item)"
@@ -648,6 +648,11 @@ onBeforeUnmount(() => {
   width: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.user-plain-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .tool-call-inline {

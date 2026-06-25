@@ -114,6 +114,17 @@ class ChatWebSocketHandler:
                     assistant_content_parts.append("<!--THINK_END-->")
                     assistant_in_thinking = False
 
+                has_text = any(
+                    p for p in assistant_content_parts
+                    if p and not p.startswith("<!--") and not p.endswith("-->")
+                )
+                if not has_text and (assistant_tool_calls or usage_rounds):
+                    print(
+                        f"[WS] Warning: stream ended with {len(usage_rounds)} LLM rounds, "
+                        f"{len(assistant_tool_calls)} tool calls, but no final text answer. "
+                        f"Possible cause: model output token limit exhausted by reasoning."
+                    )
+
                 http_traces = trace_collector.snapshot()
                 # Inject HTTP trace markers into assistant content for inline block rendering
                 if http_traces:

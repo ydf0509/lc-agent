@@ -1,6 +1,6 @@
 [project]
 name = "lc-agent-app"
-version = "0.2.0"
+version = "0.2.1"
 description = "LangChain Agent framework with built-in Web UI"
 requires-python = ">=3.12"
 license = "MIT"
@@ -37,6 +37,10 @@ lc-agent = "lc_agent.main:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lc_agent"]
+include = ["lc_agent/web/dist/**"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

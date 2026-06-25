@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class ModelConfig(BaseModel):
     id: str
     context_limit: int = 8000
+    max_output_tokens: int = 0
 
 
 class ProviderConfig(BaseModel):
