@@ -40,7 +40,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lc_agent"]
-include = ["lc_agent/web/dist/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["lc_agent/**", "README.md", "pyproject.toml", "LICENSE"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
