@@ -1,23 +1,102 @@
 {
-    // lc_agent 配置文件
+    // ============================================================
+    //  lc-agent 配置文件
+    //  复制本文件为 config.jsonc，根据需要修改
+    // ============================================================
+
+    // ----- LLM 供应商 -----
+    // 支持配置多个供应商，每个供应商可配置多个模型
+    // provider 名称随意取，仅用于内部标识
     "provider": {
-        "default": {
-            "api_key": "{env:LLM_API_KEY}",
+        "deepseek": {
+            // API Key，支持 {env:ENV_VAR_NAME} 语法读取环境变量
+            "api_key": "{env:DEEPSEEK_API_KEY}",
+            // API 地址（OpenAI 兼容格式）
             "base_url": "https://api.deepseek.com/v1",
             "models": [
-                {"id": "deepseek-chat", "context_limit": 64000},
-                {"id": "deepseek-reasoner", "context_limit": 64000}
+                {
+                    "id": "deepseek-chat",       // 模型 ID，前端显示和切换用
+                    "context_limit": 64000,       // 上下文窗口大小（tokens）
+                    "max_output_tokens": 65536    // 最大输出 tokens，0 = 不限制
+                },
+                {
+                    "id": "deepseek-reasoner",
+                    "context_limit": 64000,
+                    "max_output_tokens": 65536
+                }
             ]
         }
+        // 可以配置多个供应商，如 OpenAI、Anthropic、本地 LiteLLM 等
+        // "openai": {
+        //     "api_key": "{env:OPENAI_API_KEY}",
+        //     "base_url": "https://api.openai.com/v1",
+        //     "models": [
+        //         {"id": "gpt-4o", "context_limit": 128000, "max_output_tokens": 16384}
+        //     ]
+        // },
+        // "litellm": {
+        //     "api_key": "sk-no-key-needed",
+        //     "base_url": "http://localhost:4000/v1",
+        //     "models": [
+        //         {"id": "my-model", "context_limit": 64000, "max_output_tokens": 65536}
+        //     ]
+        // }
     },
+
+    // ----- Agent 配置 -----
     "agent": {
+        // 系统提示词（所有内置预设共用）
         "system_prompt": "你是一个智能助手。请用中文回答。",
+        // 默认使用的模型 ID（必须是 provider.models 中已定义的）
         "default_model": "deepseek-chat",
-        "streaming": true
+        // 是否启用流式输出
+        "streaming": true,
+        // LangGraph 最大递归步数（agent 调用工具的最大轮数），默认 100
+        "recursion_limit": 100
     },
-    "mcp": {
+
+    // ----- 数据库 -----
+    "database": {
+        // 对话历史存储（SQLAlchemy async URL）
+        "url": "sqlite+aiosqlite:///./lc_agent_data.db",
+        // LangGraph checkpoint 存储路径
+        "checkpoint_path": "./lc_agent_checkpoints.db"
     },
-    "session": {
-        "db_path": ""
+
+    // ----- UI -----
+    "ui": {
+        // 左上角显示的应用名称，默认 "lc_agent"
+        "app_name": "lc_agent"
+    },
+
+    // ----- Skills -----
+    // 技能扫描目录列表，支持多个目录
+    "skills": ["./skills"],
+
+    // ----- MCP 服务器 -----
+    // 支持 local（stdio）、sse、http 三种传输方式
+    "mcp_servers": {
+        // --- 示例：stdio 本地进程 ---
+        // "filesystem": {
+        //     "type": "local",
+        //     "command": "npx",
+        //     "args": ["-y", "@anthropic-ai/mcp-filesystem"],
+        //     "env": {},           // 额外环境变量
+        //     "enabled": true      // 是否启用，默认 true
+        // },
+
+        // --- 示例：SSE 远程服务 ---
+        // "remote-search": {
+        //     "type": "sse",
+        //     "url": "http://localhost:8080/sse",
+        //     "enabled": true
+        // },
+
+        // --- 示例：Streamable HTTP ---
+        // "my-http-mcp": {
+        //     "type": "http",
+        //     "url": "http://localhost:9090/mcp",
+        //     "enabled": true
+        // }
     }
 }

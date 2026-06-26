@@ -67,7 +67,7 @@ if ($pids) {
         Write-Host "  Killing PID $_"
         Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep 2
+    Start-Sleep 10
     $remaining = Get-PortProcessIds -TargetPort $Port
     if ($remaining) {
         throw "Port $Port is still occupied by PID(s): $($remaining -join ', ')"
