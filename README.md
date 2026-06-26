@@ -25,9 +25,7 @@
 
 ![HTTP追踪与Token面板](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/pc02.png)
 
-**任务进度追踪 — Agent 自动拆解复杂任务、实时更新进度**
 
-![任务进度卡片](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/todolist.png)
 
 **工具调用详情 — 参数、返回值、思考过程**
 
@@ -38,6 +36,8 @@
 ![移动端界面](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/phone01.png)
 
 **使用lc-agent框架的真实用户的案例截图**
+
+ai agent 自动分解任务，并实时更新进度，并最终完成任务。
 
 ![用户真实案例](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/user_case.png)
 
