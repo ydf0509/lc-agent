@@ -37,7 +37,7 @@
 
 ![移动端界面](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/phone01.png)
 
-**使用lc-agent框架的用户的真实案例截图**
+**使用lc-agent框架的真实用户的案例截图**
 
 ![用户真实案例](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/user_case.png)
 
