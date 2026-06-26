@@ -33,15 +33,19 @@
 
 ![移动端界面](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/phone01.png)
 
+**使用lc-agent框架的用户的真实案例截图**
+
+![用户真实案例](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/user_case.png)
+
 ## 安装
 
-请注意安装包名字是`lc-agent-app`，不是`lc-agent`，因为`lc-agent`这个名字在pypi过不了审核。
+请注意安装包名字是`lc-agent-app`，不是`lc-agent`，因为`lc-agent`这个名字在pypi过不了审核。 
 
 ```bash
 # 从 PyPI 安装
 pip install lc-agent-app
 
-# 或从源码开发安装
+# 或从源码开发安装，先从github ，git clone下来，然后打开项目根目录，执行以下命令
 pip install -e .
 ```
 
