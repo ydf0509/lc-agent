@@ -25,6 +25,10 @@
 
 ![HTTP追踪与Token面板](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/pc02.png)
 
+**任务进度追踪 — Agent 自动拆解复杂任务、实时更新进度**
+
+![任务进度卡片](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/todolist.png)
+
 **工具调用详情 — 参数、返回值、思考过程**
 
 ![工具调用卡片](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/pc03.png)
@@ -60,6 +64,12 @@ pip install -e .
 - 运行时热切换模型 / 工具 / MCP / Skills，无需重启
 - 每次对话可临时覆盖模型（前端直接切换）
 - 代码注册自定义 `CompiledStateGraph` Agent
+
+### 任务进度追踪
+- Agent 自动将复杂任务拆解为多个子步骤，实时追踪每步进度
+- 基于 LangChain 官方 `TodoListMiddleware`，Agent 自主规划、自主更新
+- 三态可视化：`pending` → `in_progress` → `completed`，带进度条
+- 前端独立渲染任务卡片，不与工具调用混排，界面清晰不刷屏
 
 ### 可观测性（类 LangFuse）
 - **HTTP 追踪**：自动捕获每轮 LLM 请求/响应全文，敏感信息自动脱敏
