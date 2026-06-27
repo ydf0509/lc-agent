@@ -71,7 +71,12 @@
                   <div class="markdown-body thinking-body" v-html="renderMarkdown(seg.text)" />
                 </details>
                 <div v-else-if="seg.type === 'tool' && item.toolCalls && seg.toolIndex != null" class="tool-call-inline">
+                  <TodoProgressCard
+                    v-if="item.toolCalls[seg.toolIndex!]?.name === 'write_todos'"
+                    :tool-call="item.toolCalls[seg.toolIndex!]"
+                  />
                   <ToolCallCard
+                    v-else
                     :tool-call="item.toolCalls[seg.toolIndex!]"
                     :collapsed="item.toolCalls[seg.toolIndex!]?.status === 'done'"
                   />
@@ -157,6 +162,7 @@ import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
 import ToolCallCard from '@/components/chat/ToolCallCard.vue'
+import TodoProgressCard from '@/components/chat/TodoProgressCard.vue'
 import HttpTraceBlock from '@/components/chat/HttpTraceBlock.vue'
 import TokenUsagePanel from '@/components/chat/TokenUsagePanel.vue'
 import MessageToolbar from '@/components/chat/MessageToolbar.vue'

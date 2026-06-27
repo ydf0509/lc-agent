@@ -465,21 +465,15 @@ class ChatWebSocketHandler:
             tool_name = event.get("name", "")
             tool_input = event.get("data", {}).get("input", {})
 
-            if tool_name == "write_todos" and isinstance(tool_input, dict):
-                todos = tool_input.get("todos", [])
-                await websocket.send_json({"type": "todos", "todos": todos})
-            else:
-                await websocket.send_json({
-                    "type": "tool_call",
-                    "name": tool_name,
-                    "run_id": event.get("run_id", ""),
-                    "args": tool_input,
-                })
+            await websocket.send_json({
+                "type": "tool_call",
+                "name": tool_name,
+                "run_id": event.get("run_id", ""),
+                "args": tool_input,
+            })
 
         elif kind == "on_tool_end":
             tool_name = event.get("name", "")
-            if tool_name == "write_todos":
-                return
             output = event.get("data", {}).get("output", "")
             result_str = str(output)
             await websocket.send_json({
