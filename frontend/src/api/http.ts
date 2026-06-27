@@ -13,7 +13,7 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
 }
 
 export const api = {
-  health: () => fetchApi<{ status: string; version: string }>('/health'),
+  health: () => fetchApi<{ status: string; version: string; app_name?: string }>('/health'),
 
   getTools: () => fetchApi<{ name: string; group: string; group_description: string; description: string }[]>('/tools'),
   getToolGroups: () => fetchApi<{ id: string; description: string; tools: { name: string; description: string }[]; enabled: boolean }[]>('/tools/groups'),

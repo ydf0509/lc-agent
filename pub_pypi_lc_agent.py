@@ -19,8 +19,8 @@ os.system(f'"{python}" -m twine upload dist/* --verbose')
 t_end = time.time()
 print(f"upload time: {t_end - t_start}")
 
-if os.path.exists("dist"):
-    shutil.rmtree("dist")
+# if os.path.exists("dist"):
+#     shutil.rmtree("dist")
 
 
 print(time.strftime("%Y-%m-%d %H:%M:%S"))

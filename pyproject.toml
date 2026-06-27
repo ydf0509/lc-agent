@@ -1,6 +1,6 @@
 [project]
 name = "lc-agent-app"
-version = "0.2.1"
+version = "0.2.3"
 description = "LangChain Agent framework with built-in Web UI"
 requires-python = ">=3.12"
 license = "MIT"
