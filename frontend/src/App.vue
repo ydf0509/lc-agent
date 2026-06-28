@@ -2,6 +2,7 @@
   <ConfigProvider :theme="isDark ? 'dark' : 'light'">
   <div class="app-container">
     <AppHeader
+      :app-name="appName"
       :model-name="toolsStore.currentModel || agentsStore.currentAgent?.default_model || 'N/A'"
       :connected="chatStore.isConnected"
       @edit-agent="editCurrentAgent"
@@ -54,6 +55,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ConfigProvider } from 'vue-element-plus-x'
 import { useTheme } from '@/composables/useTheme'
+import { api } from '@/api/http'
 import { useChatStore } from '@/stores/chat'
 import { useToolsStore } from '@/stores/tools'
 import { useAgentsStore } from '@/stores/agents'
@@ -75,6 +77,7 @@ const agentEditorRef = ref<InstanceType<typeof AgentEditorDialog>>()
 const sidebarCollapsed = ref(false)
 const mobileLeftOpen = ref(false)
 const mobileRightOpen = ref(false)
+const appName = ref('lc_agent')
 
 onMounted(async () => {
   await Promise.all([
@@ -82,6 +85,16 @@ onMounted(async () => {
     agentsStore.init(),
     sessionsStore.init(),
   ])
+
+  try {
+    const health = await api.health()
+    if (health.app_name?.trim()) {
+      appName.value = health.app_name.trim()
+      document.title = health.app_name.trim()
+    }
+  } catch (e) {
+    console.error('[App] Failed to fetch app name:', e)
+  }
 
   const sessionId = route.params.sessionId as string
   if (sessionId) {

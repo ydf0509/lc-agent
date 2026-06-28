@@ -30,6 +30,20 @@ class TestHealthEndpoint:
         data = response.json()
         assert "config_loaded" in data
 
+    async def test_health_includes_ui_app_name(self, sample_config):
+        config = {
+            **sample_config,
+            "ui": {"app_name": "心有灵犀"},
+        }
+        app = create_app(config)
+        app.state.config = config
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/health")
+
+        data = response.json()
+        assert data["app_name"] == "心有灵犀"
+
 
 class TestCORS:
     async def test_cors_allows_all_origins(self, client):

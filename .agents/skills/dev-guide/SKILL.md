@@ -2,7 +2,7 @@
 name: dev-guide
 description: >-
   lc-agent 框架 和 lc-agent-bfzs 演示项目的开发指南。
-  AI 在新会话中编写、修改、运行这两个项目代码时必须遵循此 Skill。
+  编写、修改、运行这两个项目代码时必须遵循此 Skill。
 ---
 
 # lc-agent 开发指南
@@ -280,7 +280,15 @@ Agent Preset 的 `allowed_tool_groups` / `allowed_mcp_servers` / `allowed_skills
 - `[]` = 全部禁止
 - `["a", "b"]` = 只允许指定的
 
-### 6.4 内置预设 Agent
+### 6.4 Agent 的三种创建方式
+
+| 方式 | 来源 | 存储 | 构建逻辑 | Middleware |
+|------|------|------|----------|-----------|
+| **内置预设** | 框架代码 | 无需存储 | `engine.build_agent()` | 框架自动添加 |
+| **用户网页创建** | Web UI 编辑 | SQLite `agent_presets` 表 | `engine.build_agent()` | 框架自动添加 |
+| **用户代码创建** | Python 代码 | 无（内存） | 用户自己构建 graph | **用户完全控制** |
+
+#### 内置预设（硬编码在框架中）
 
 | ID | 行为 |
 |----|------|
@@ -288,9 +296,29 @@ Agent Preset 的 `allowed_tool_groups` / `allowed_mcp_servers` / `allowed_skills
 | `__empty__` | 默认不启用工具 |
 | `__power__` | 默认启用所有工具 |
 
-用户可在 Web UI 创建自定义预设（存数据库）。
+#### 用户网页创建的预设
 
-### 6.5 流式输出 WebSocket 协议
+用户在 Web UI 中创建/编辑的 Agent Preset，存入 SQLite 数据库。
+启动时从 DB 加载，走 `build_agent()` 创建，享有框架自动添加的 middleware。
+
+#### 用户代码创建的 Agent
+
+通过 `app.add_agent(name, graph, description)` 注册自定义 LangGraph：
+```python
+app.add_agent(name="my_agent", graph=my_compiled_graph, description="描述")
+```
+- graph 可以来自 `create_agent`、`create_deep_agent`、或手动 `StateGraph().compile()`
+- 框架**不会**往用户 graph 里添加任何 middleware
+- 用户需要自行管理上下文裁剪、工具、权限等
+
+### 6.5 Middleware 作用范围
+
+框架的 `build_agent()` 会自动为内置/网页创建的 preset 添加 middleware（TodoListMiddleware、SummarizationMiddleware 等）。
+**但 `app.add_agent(name, graph)` 注册的用户自定义 graph 不受影响** — 框架不会往用户的 graph 里插入任何 middleware。
+
+用户如果想给自己的 agent 加上下文裁剪，需要自行在构建 graph 时配置 middleware（如 deepagents 的 SummarizationMiddleware 或 langchain 的 SummarizationMiddleware）。
+
+### 6.6 流式输出 WebSocket 协议
 
 客户端发送:
 ```json
@@ -329,6 +357,7 @@ Agent Preset 的 `allowed_tool_groups` / `allowed_mcp_servers` / `allowed_skills
 # Agent 创建 (langchain >= 1.0)
 from langchain.agents import create_agent
 from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware.summarization import SummarizationMiddleware
 
 # LangGraph (>= 0.4)
 from langgraph.graph import StateGraph, START, END
@@ -362,8 +391,34 @@ from langchain_agentskills.loaders import DirectorySkillLoader, CompositeSkillLo
 4. **bfzs 工作目录** — 启动 bfzs 时 cwd 必须是 `D:\codes\lc-agent-bfzs`（因为 config.jsonc 中的相对路径基于此）
 5. **MCP 服务器** — 类型分 `local`(subprocess)、`sse`、`http`(streamable HTTP)
 6. **LiteLLM** — bfzs 通过 LiteLLM 代理访问各家 LLM，默认 `http://localhost:4000/v1`
+7. **新增功能前先查生态** — 见下方"架构原则"
 
-## 10. 快速参考: 公开 API
+## 10. 架构原则：优先复用 LangChain 生态
+
+**新增功能时，必须优先检查 langchain/langgraph/deepagents 生态是否已有现成实现，而不是手动从零造轮子。**
+
+已有的成功案例：
+| 功能 | 来源（非自研） | 包 |
+|------|---------------|-----|
+| Agent 创建 | `create_agent` | `langchain` |
+| TodoList | `TodoListMiddleware` | `langchain.agents.middleware` |
+| 上下文摘要 | `SummarizationMiddleware` | `langchain.agents.middleware` |
+| Skills 系统 | `SkillsToolkit` | `langchain_agentskills` |
+| Checkpoint | `AsyncSqliteSaver` | `langgraph` |
+
+**查找顺序：**
+1. `langchain.agents.middleware` — 有没有现成 middleware？
+2. `langgraph` — 有没有内置能力（如 interrupt、checkpoint）？
+3. `deepagents` — 有没有增强实现（如 SummarizationMiddleware + backend offload）？
+4. `langchain_core` / `langchain_community` — 有没有工具类可用？
+5. 以上都没有 → 才自己实现
+
+**检查方法：**
+- 用 `docs-langchain` / `reference-langchain` MCP 搜索
+- 用 `nbrag` MCP 搜索 `langchain_ai_codes_and_docs` 知识库
+- 直接读 `D:\ProgramData\miniconda3\envs\py312\Lib\site-packages\` 下的源码
+
+## 11. 快速参考: 公开 API
 
 ```python
 from lc_agent import LcAgentApp, load_config, tool, ToolRegistry

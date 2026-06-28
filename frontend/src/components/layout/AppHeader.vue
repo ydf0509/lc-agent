@@ -1,6 +1,6 @@
 <template>
-  <header class="app-header" :class="{ 'is-desktop': isDesktop }">
-    <div class="header-left" :class="{ 'desktop-drag': isDesktop }">
+  <header class="app-header">
+    <div class="header-left">
       <el-button
         class="mobile-sidebar-btn"
         :icon="Menu"
@@ -9,9 +9,9 @@
         aria-label="打开会话列表"
         @click="$emit('openMobileSidebar')"
       />
-      <span class="logo">⚡ lc_agent</span>
+      <span class="logo">⚡ {{ appName }}</span>
     </div>
-    <div class="header-center" :class="{ 'desktop-no-drag': isDesktop }">
+    <div class="header-center">
       <el-select
         class="agent-select"
         :model-value="agentsStore.currentAgentId"
@@ -36,7 +36,7 @@
       <button class="header-btn btn-new-agent" @click="$emit('newAgent')">+ 新Agent</button>
       <button class="header-btn btn-new-chat" @click="$emit('newChat')">+ 新对话</button>
     </div>
-    <div class="header-right" :class="{ 'desktop-no-drag': isDesktop }">
+    <div class="header-right">
       <el-button
         class="mobile-tools-btn"
         :icon="Setting"
@@ -51,55 +51,20 @@
         {{ connected ? '已连接' : '未连接' }}
       </span>
       <el-button :icon="isDark ? Sunny : Moon" circle size="small" @click="toggleDark()" />
-      <div v-if="isDesktop" class="window-controls" aria-label="窗口控制">
-        <button class="window-control" type="button" aria-label="最小化" @click="minimizeWindow">─</button>
-        <button class="window-control" type="button" aria-label="全屏或还原" @click="toggleMaximizeWindow">□</button>
-        <button class="window-control close" type="button" aria-label="关闭" @click="closeWindow">×</button>
-      </div>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import { useAgentsStore } from '@/stores/agents'
 import { useTheme } from '@/composables/useTheme'
 import { Sunny, Moon, Menu, Setting } from '@element-plus/icons-vue'
 
-declare global {
-  interface Window {
-    pywebview?: {
-      api?: {
-        minimize?: () => void
-        toggle_maximize?: () => void
-        close?: () => void
-      }
-    }
-  }
-}
-
 const agentsStore = useAgentsStore()
 const { isDark, toggleDark } = useTheme()
-const isDesktop = ref(false)
-
-onMounted(() => {
-  const params = new URLSearchParams(window.location.search)
-  isDesktop.value = params.get('desktop') === '1' || Boolean(window.pywebview?.api)
-})
-
-function minimizeWindow() {
-  window.pywebview?.api?.minimize?.()
-}
-
-function toggleMaximizeWindow() {
-  window.pywebview?.api?.toggle_maximize?.()
-}
-
-function closeWindow() {
-  window.pywebview?.api?.close?.()
-}
 
 defineProps<{
+  appName: string
   modelName: string
   connected: boolean
 }>()
@@ -127,18 +92,10 @@ defineEmits<{
   z-index: 100;
 }
 
-.app-header.is-desktop {
-  padding-right: 0;
-}
-
 .logo {
   font-size: 16px;
   font-weight: 700;
   color: var(--el-color-primary);
-}
-
-.is-desktop .logo {
-  pointer-events: auto;
 }
 
 .header-left {
@@ -221,100 +178,60 @@ defineEmits<{
 }
 
 .badge-code {
-  background: var(--el-color-warning-light-9);
-  color: var(--el-color-warning);
-  border: 1px solid var(--el-color-warning-light-5);
-}
-
-.badge-user {
   background: var(--el-color-success-light-9);
   color: var(--el-color-success);
   border: 1px solid var(--el-color-success-light-5);
 }
 
-.header-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border: none;
+.badge-user {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning-dark-2);
+  border: 1px solid var(--el-color-warning-light-5);
 }
 
-.header-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.header-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .btn-edit {
   background: var(--el-fill-color-light);
   color: var(--el-text-color-regular);
-  border: 1px solid var(--el-border-color);
 }
 
 .btn-edit:hover:not(:disabled) {
   background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
 }
 
-.btn-new-agent {
-  background: var(--el-color-success);
-  color: var(--el-color-white);
+.btn-edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.btn-new-agent:hover {
-  background: var(--el-color-success-light-3);
-}
-
+.btn-new-agent,
 .btn-new-chat {
   background: var(--el-color-primary);
-  color: var(--el-color-white);
-  white-space: nowrap;
-  flex-shrink: 0;
+  color: white;
 }
 
+.btn-new-agent:hover,
 .btn-new-chat:hover {
-  background: var(--el-color-primary-light-3);
+  background: var(--el-color-primary-dark-2);
 }
 
-.window-controls {
-  display: flex;
-  align-items: stretch;
-  align-self: stretch;
-  margin-left: 4px;
-  border-left: 1px solid color-mix(in srgb, var(--el-border-color) 72%, transparent);
-}
-
-.window-control {
-  width: 46px;
-  height: 100%;
-  border: none;
-  background: transparent;
-  color: var(--el-text-color-regular);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.14s ease, color 0.14s ease;
-}
-
-.window-control:hover {
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-primary);
-}
-
-.window-control.close {
-  font-size: 18px;
-}
-
-.window-control.close:hover {
-  background: #e81123;
-  color: #fff;
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 @media (max-width: 900px) {
   .app-header {
-    padding: 8px 0 8px 10px;
+    padding: 8px 12px;
     gap: 8px;
   }
 
@@ -324,64 +241,25 @@ defineEmits<{
     flex-shrink: 0;
   }
 
-  .header-left,
-  .header-right {
-    flex-shrink: 0;
-  }
-
   .header-center {
-    flex: 1;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    overflow: hidden;
   }
 
-  .agent-select {
-    width: min(42vw, 220px);
+  .header-right {
+    gap: 6px;
   }
 
-  .btn-edit,
-  .btn-new-agent,
-  .model-badge {
-    display: none;
-  }
-}
-
-@media (max-width: 520px) {
-  .logo {
-    font-size: 14px;
-  }
-
-  .agent-select {
-    width: min(40vw, 160px);
-  }
-
+  .agent-select,
+  .header-btn,
+  .model-badge,
+  .status-dot,
   .status-text {
     display: none;
   }
 
-  .btn-new-chat {
-    padding: 5px 8px;
-  }
-}
-
-@media (max-width: 420px) {
   .logo {
-    display: none;
+    font-size: 14px;
   }
-
-  .agent-select {
-    width: min(46vw, 170px);
-  }
-}
-</style>
-
-<style>
-.app-header.is-desktop {
-  -webkit-app-region: drag;
-}
-.desktop-drag {
-  -webkit-app-region: drag;
-}
-.desktop-no-drag {
-  -webkit-app-region: no-drag;
 }
 </style>

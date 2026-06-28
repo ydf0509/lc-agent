@@ -14,4 +14,5 @@ async def health(request: Request):
         "status": "ok",
         "version": __version__,
         "config_loaded": config.get("_config_path") is not None,
+        "app_name": config.get("ui", {}).get("app_name"),
     }

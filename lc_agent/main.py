@@ -9,7 +9,7 @@ def main():
     parser.add_argument("--port", "-p", type=int, default=8000, help="Server port (default: 8000)")
     parser.add_argument("--dotenv", help="Path to .env file")
     parser.add_argument("--desktop", action="store_true", help="Run in desktop window mode")
-    parser.add_argument("--title", default="lc-agent", help="Desktop window title")
+    parser.add_argument("--title", default=None, help="Desktop window title")
     args = parser.parse_args()
 
     from lc_agent.config.loader import load_config
