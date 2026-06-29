@@ -25,7 +25,7 @@
           :value="agent.id"
         >
           <div class="agent-option">
-            <span>{{ agent.name }}</span>
+            <span class="agent-option-name">{{ agent.name }}</span>
             <span v-if="agent.source === 'builtin'" class="source-badge badge-builtin">内置</span>
             <span v-else-if="agent.source === 'code'" class="source-badge badge-code">代码</span>
             <span v-else class="source-badge badge-user">自建</span>
@@ -37,6 +37,7 @@
       <button class="header-btn btn-new-chat" @click="$emit('newChat')">+ 新对话</button>
     </div>
     <div class="header-right">
+      <button class="header-btn mobile-new-chat-btn" @click="$emit('newChat')">新对话</button>
       <el-button
         class="mobile-tools-btn"
         :icon="Setting"
@@ -64,9 +65,9 @@ const agentsStore = useAgentsStore()
 const { isDark, toggleDark } = useTheme()
 
 defineProps<{
+  appName: string
   modelName: string
   connected: boolean
-  appName: string
 }>()
 
 defineEmits<{
@@ -107,8 +108,10 @@ defineEmits<{
 .header-center {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   min-width: 0;
+  flex: 1;
 }
 
 .header-right {
@@ -118,12 +121,27 @@ defineEmits<{
 }
 
 .mobile-sidebar-btn,
-.mobile-tools-btn {
+.mobile-tools-btn,
+.mobile-new-chat-btn {
   display: none;
 }
 
 .agent-select {
   width: 240px;
+}
+
+.agent-select :deep(.el-select__wrapper) {
+  min-width: 0;
+  padding-right: 28px;
+}
+
+.agent-select :deep(.el-select__selected-item) {
+  min-width: 0;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .model-badge {
@@ -159,7 +177,16 @@ defineEmits<{
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
+}
+
+.agent-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .source-badge {
@@ -167,6 +194,7 @@ defineEmits<{
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .badge-builtin {
@@ -176,121 +204,118 @@ defineEmits<{
 }
 
 .badge-code {
-  background: var(--el-color-warning-light-9);
-  color: var(--el-color-warning);
-  border: 1px solid var(--el-color-warning-light-5);
-}
-
-.badge-user {
   background: var(--el-color-success-light-9);
   color: var(--el-color-success);
   border: 1px solid var(--el-color-success-light-5);
 }
 
-.header-btn {
-  padding: 5px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border: none;
+.badge-user {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning-dark-2);
+  border: 1px solid var(--el-color-warning-light-5);
 }
 
-.header-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.header-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
 .btn-edit {
   background: var(--el-fill-color-light);
   color: var(--el-text-color-regular);
-  border: 1px solid var(--el-border-color);
 }
 
 .btn-edit:hover:not(:disabled) {
   background: var(--el-fill-color);
-  color: var(--el-text-color-primary);
 }
 
-.btn-new-agent {
-  background: var(--el-color-success);
-  color: var(--el-color-white);
+.btn-edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.btn-new-agent:hover {
-  background: var(--el-color-success-light-3);
-}
-
-.btn-new-chat {
+.btn-new-agent,
+.btn-new-chat,
+.mobile-new-chat-btn {
   background: var(--el-color-primary);
-  color: var(--el-color-white);
-  white-space: nowrap;
-  flex-shrink: 0;
+  color: white;
 }
 
-.btn-new-chat:hover {
-  background: var(--el-color-primary-light-3);
+.btn-new-agent:hover,
+.btn-new-chat:hover,
+.mobile-new-chat-btn:hover {
+  background: var(--el-color-primary-dark-2);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 @media (max-width: 900px) {
   .app-header {
     padding: 8px 10px;
-    gap: 8px;
+    gap: 6px;
   }
 
   .mobile-sidebar-btn,
-  .mobile-tools-btn {
+  .mobile-tools-btn,
+  .mobile-new-chat-btn {
     display: inline-flex;
     flex-shrink: 0;
   }
 
-  .header-left,
-  .header-right {
+  .header-left {
     flex-shrink: 0;
   }
 
-  .header-center {
-    flex: 1;
-    justify-content: flex-end;
-  }
-
-  .agent-select {
-    width: min(42vw, 220px);
-  }
-
-  .btn-edit,
-  .btn-new-agent,
-  .model-badge {
+  .logo {
     display: none;
   }
-}
 
-@media (max-width: 520px) {
-  .logo {
-    font-size: 14px;
+  .header-center {
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+
+  .header-right {
+    gap: 4px;
   }
 
   .agent-select {
-    width: min(40vw, 160px);
+    display: inline-flex;
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    max-width: none;
   }
 
+  .agent-select :deep(.el-select__wrapper) {
+    width: 100%;
+    min-width: 0;
+    padding-right: 24px;
+  }
+
+  .header-btn,
+  .model-badge,
+  .status-dot,
   .status-text {
     display: none;
   }
 
-  .btn-new-chat {
-    padding: 5px 8px;
-  }
-}
-
-@media (max-width: 420px) {
-  .logo {
-    display: none;
-  }
-
-  .agent-select {
-    width: min(46vw, 170px);
+  .mobile-new-chat-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    white-space: nowrap;
+    font-size: 12px;
+    flex-shrink: 0;
   }
 }
 </style>

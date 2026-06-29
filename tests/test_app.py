@@ -26,3 +26,19 @@ class TestLcAgentApp:
         app = LcAgentApp(sample_config, host="0.0.0.0", port=9000)
         assert app.host == "0.0.0.0"
         assert app.port == 9000
+
+    def test_resolves_desktop_title_from_ui_app_name(self, sample_config):
+        config = {
+            **sample_config,
+            "ui": {"app_name": "心有灵犀"},
+        }
+        app = LcAgentApp(config)
+        assert app._resolve_desktop_title(None) == "心有灵犀"
+
+    def test_explicit_desktop_title_overrides_ui_app_name(self, sample_config):
+        config = {
+            **sample_config,
+            "ui": {"app_name": "心有灵犀"},
+        }
+        app = LcAgentApp(config)
+        assert app._resolve_desktop_title("自定义标题") == "自定义标题"

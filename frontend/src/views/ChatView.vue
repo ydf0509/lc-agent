@@ -62,7 +62,7 @@
                 <details
                   v-else-if="seg.type === 'thinking' && seg.text"
                   class="thinking-block"
-                  open
+                  :open="isThinkingExpanded(item)"
                 >
                   <summary class="thinking-summary">
                     <el-icon><Cpu /></el-icon>
@@ -71,7 +71,12 @@
                   <div class="markdown-body thinking-body" v-html="renderMarkdown(seg.text)" />
                 </details>
                 <div v-else-if="seg.type === 'tool' && item.toolCalls && seg.toolIndex != null" class="tool-call-inline">
+                  <TodoProgressCard
+                    v-if="item.toolCalls[seg.toolIndex!]?.name === 'write_todos'"
+                    :tool-call="item.toolCalls[seg.toolIndex!]"
+                  />
                   <ToolCallCard
+                    v-else
                     :tool-call="item.toolCalls[seg.toolIndex!]"
                     :collapsed="item.toolCalls[seg.toolIndex!]?.status === 'done'"
                   />
@@ -150,13 +155,14 @@ import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
 import { Cpu, User } from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
-import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace, ChatMessage } from '@/stores/chat'
+import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
 import ToolCallCard from '@/components/chat/ToolCallCard.vue'
+import TodoProgressCard from '@/components/chat/TodoProgressCard.vue'
 import HttpTraceBlock from '@/components/chat/HttpTraceBlock.vue'
 import TokenUsagePanel from '@/components/chat/TokenUsagePanel.vue'
 import MessageToolbar from '@/components/chat/MessageToolbar.vue'
@@ -180,6 +186,7 @@ type ChatBubbleItem = BubbleListItemProps & {
   hasToolCalls?: boolean
   hasAnswer?: boolean
   httpTraces?: HttpTrace[]
+  isStreamingMessage?: boolean
 }
 
 const chatStore = useChatStore()
@@ -203,6 +210,10 @@ const bubbleList = computed((): ChatBubbleItem[] =>
       const segs = msg.role === 'assistant' && hasStructuredSegments(msg.content || '', msg.toolCalls)
         ? parseSegments(msg.content || '', msg.toolCalls)
         : undefined
+      const isStreamingMessage =
+        msg.role === 'assistant'
+        && idx === arr.length - 1
+        && isStreaming.value
       return {
         key: msg.id,
         messageId: msg.id,
@@ -219,10 +230,9 @@ const bubbleList = computed((): ChatBubbleItem[] =>
         hasThinking: segs?.some(s => s.type === 'thinking' && s.text?.trim()) ?? false,
         hasToolCalls: segs?.some(s => s.type === 'tool') ?? false,
         hasAnswer: segs?.some(s => s.type === 'text' && s.text?.trim()) ?? false,
+        isStreamingMessage,
         loading:
-          msg.role === 'assistant'
-          && idx === arr.length - 1
-          && isStreaming.value
+          isStreamingMessage
           && !msg.content,
         avatarSize: '28px',
         avatarGap: '8px',
@@ -249,6 +259,10 @@ function getModelLabel(): string {
   if (!model) return '模型未选择'
   const parts = model.split('/')
   return parts[parts.length - 1] || model
+}
+
+function isThinkingExpanded(item: ChatBubbleItem): boolean {
+  return item.isStreamingMessage === true
 }
 
 function canEditMessage(item: ChatBubbleItem) {
@@ -472,6 +486,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
   height: 100%;
+  min-height: 0;
 }
 
 .messages-container {
@@ -484,6 +499,7 @@ onBeforeUnmount(() => {
   padding: 16px;
   background: var(--el-bg-color-page);
   min-width: 0;
+  min-height: 0;
 }
 
 .chat-actions-bar {
@@ -495,6 +511,15 @@ onBeforeUnmount(() => {
 
 .messages-container :deep(.elx-bubble-list) {
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.messages-container :deep(.elx-bubble-list__content) {
+  min-height: 100%;
 }
 
 .messages-container :deep(.elx-bubble) {
@@ -525,15 +550,9 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
 }
 
-.messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
-.messages-container :deep(.elx-bubble--start .elx-bubble__content) {
-  width: 100%;
-  max-width: 100% !important;
-}
-
-.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
-.messages-container :deep(.elx-bubble--end .elx-bubble__content) {
-  max-width: 100% !important;
+.messages-container :deep(.elx-bubble--start),
+.messages-container :deep(.elx-bubble--end) {
+  padding-inline: 0 !important;
 }
 
 .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
@@ -544,6 +563,17 @@ onBeforeUnmount(() => {
 .messages-container :deep(.elx-bubble__content) {
   max-width: none !important;
   min-width: 0;
+}
+
+.messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--start .elx-bubble__content) {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--end .elx-bubble__content) {
+  max-width: 100% !important;
 }
 
 .role-avatar {
@@ -772,62 +802,157 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-primary) !important;
 }
 
-.messages-container :deep(.elx-welcome__description) {
-  color: var(--el-text-color-secondary) !important;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .messages-container {
-    --chat-assistant-bubble-width: 100%;
-    --chat-user-bubble-max-width: min(86%, 680px);
-    padding: 12px;
+    padding: 6px 0;
+    overscroll-behavior-y: contain;
   }
 
-  .messages-container :deep(.elx-bubble) {
-    max-width: 100% !important;
-  }
-}
-
-@media (max-width: 520px) {
-  .messages-container {
-    --chat-user-bubble-max-width: 86%;
-    padding: 6px 6px 8px 0;
-  }
-
-  .messages-container :deep(.elx-bubble) {
-    max-width: 100% !important;
-  }
-
-  .messages-container :deep(.elx-bubble--start .elx-bubble__avatar) {
-    display: none;
-  }
-
-  .messages-container :deep(.elx-bubble--start) {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
+  .messages-container :deep(.elx-bubble--start),
   .messages-container :deep(.elx-bubble--end) {
     width: 100% !important;
     max-width: 100% !important;
-    justify-content: flex-end;
+    padding-inline: 0 !important;
   }
 
-  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
-    width: fit-content;
-    max-width: var(--chat-user-bubble-max-width) !important;
-  }
-
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content),
   .messages-container :deep(.elx-bubble__content) {
-    padding: 8px 10px;
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .messages-container :deep(.markdown-body),
+  .messages-container :deep(.markdown-body > *:first-child),
+  .messages-container :deep(.markdown-body > *:last-child) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-code-block),
+  .messages-container :deep(.markdown-body pre),
+  .messages-container :deep(.markdown-body table),
+  .messages-container :deep(.tool-call-card) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .thinking-summary {
+    padding: 8px 8px;
+  }
+
+  .thinking-body {
+    padding: 0 8px 10px;
+  }
+
+  .thinking-unavailable {
+    padding: 8px 8px;
+  }
+
+  .messages-container :deep(.elx-bubble__avatar) {
+    display: none !important;
   }
 
   .role-header {
-    margin-left: 4px;
+    gap: 6px;
+    margin-bottom: 5px;
   }
 
   .role-header-icon {
     display: inline-flex;
+  }
+
+  .role-model {
+    max-width: 42vw;
+  }
+}
+
+@media (max-width: 560px) {
+  .messages-container {
+    padding: 4px 0;
+  }
+
+  .messages-container :deep(.elx-bubble-list__content) {
+    gap: 0 !important;
+  }
+
+  .messages-container :deep(.elx-bubble-list) {
+    overscroll-behavior: contain;
+  }
+
+  .messages-container :deep(.elx-bubble--start),
+  .messages-container :deep(.elx-bubble--end) {
+    padding-inline: 0 !important;
+    margin-inline: 0 !important;
+  }
+
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content),
+  .messages-container :deep(.elx-bubble__content),
+  .messages-container :deep(.markdown-body),
+  .messages-container :deep(.tool-call-card) {
+    width: 100%;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-code-block),
+  .messages-container :deep(.markdown-body pre),
+  .messages-container :deep(.markdown-body table) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-body > p),
+  .messages-container :deep(.markdown-body > ul),
+  .messages-container :deep(.markdown-body > ol),
+  .messages-container :deep(.markdown-body > blockquote),
+  .messages-container :deep(.markdown-body > h1),
+  .messages-container :deep(.markdown-body > h2),
+  .messages-container :deep(.markdown-body > h3),
+  .messages-container :deep(.markdown-body > h4),
+  .messages-container :deep(.markdown-body > h5),
+  .messages-container :deep(.markdown-body > h6) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .thinking-summary {
+    padding: 7px 6px;
+  }
+
+  .thinking-body {
+    padding: 0 6px 9px;
+  }
+
+  .thinking-unavailable {
+    padding: 7px 6px;
+  }
+
+  .role-model {
+    max-width: 46vw;
+  }
+
+  .role-header {
+    font-size: 11px;
+  }
+
+  .message-edit-btn {
+    opacity: 1;
+    transform: none;
+    padding: 4px 8px;
+  }
+
+  .thinking-summary,
+  .thinking-body,
+  .thinking-unavailable,
+  .thinking-unavailable-text strong {
+    font-size: 12px;
   }
 }
 </style>

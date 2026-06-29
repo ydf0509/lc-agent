@@ -27,7 +27,29 @@
         </div>
 
         <div class="panel-section">
-          <h4>MCP 服务器</h4>
+          <div class="section-header">
+            <h4>MCP 服务器</h4>
+            <button class="refresh-btn" type="button" :disabled="toolsStore.mcpRefreshing" @click="toolsStore.refreshMcpServers()">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                :class="{ spinning: toolsStore.mcpRefreshing }"
+              >
+                <path d="M21 2v6h-6" />
+                <path d="M3 12a9 9 0 0 1 15.55-6.36L21 8" />
+                <path d="M3 22v-6h6" />
+                <path d="M21 12a9 9 0 0 1-15.55 6.36L3 16" />
+              </svg>
+              刷新
+            </button>
+          </div>
           <div v-for="server in toolsStore.filteredMcp" :key="server.name" class="mcp-item" :class="{ 'not-allowed': !server.allowed }">
             <div class="mcp-header">
               <div class="mcp-left">
@@ -39,9 +61,13 @@
                 />
                 <span class="mcp-name">{{ server.name }}</span>
                 <button class="detail-btn" type="button" @click="openDetail('mcp', server.name, server)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                详情
-              </button>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  详情
+                </button>
               </div>
               <el-tag size="small" :type="!server.allowed ? 'warning' : server.status === 'connected' ? 'success' : server.status === 'error' ? 'danger' : server.status === 'disabled' ? 'warning' : 'info'">
                 {{ !server.allowed ? '未授权' : server.status === 'connected' ? '已连接' : server.status === 'error' ? '错误' : server.status === 'disabled' ? '已禁用' : '未连接' }}
@@ -68,7 +94,11 @@
               />
               <span class="skill-name" :class="{ dimmed: !skill.enabled }">{{ skill.name }}</span>
               <button class="detail-btn" type="button" @click="openDetail('skill', skill.name, skill)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
                 详情
               </button>
             </div>
@@ -184,14 +214,52 @@ async function openDetail(mode: 'tool-group' | 'mcp' | 'skill', title: string, d
 }
 
 .panel-section h4 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 11px;
   color: var(--el-text-color-secondary);
   text-transform: uppercase;
   letter-spacing: 0.7px;
   font-weight: 600;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--el-border-color);
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  background: var(--el-bg-color);
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary);
+  background: color-mix(in srgb, var(--el-color-primary) 6%, var(--el-bg-color));
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinning {
+  animation: spin 0.9s linear infinite;
 }
 
 .empty-hint {
@@ -319,97 +387,8 @@ async function openDetail(mode: 'tool-group' | 'mcp' | 'skill', title: string, d
   transition: color 0.15s ease, opacity 0.15s ease;
 }
 
-.skill-name.dimmed {
-  color: var(--el-text-color-secondary);
-  opacity: 0.6;
-}
-
-.skill-disabled {
-  opacity: 0.85;
-  border: 1px dashed var(--el-border-color) !important;
-  background: var(--el-fill-color-lighter) !important;
-}
-
-.skill-disabled .skill-name {
-  color: var(--el-text-color-secondary) !important;
-  text-decoration: line-through;
-}
-
-.skill-disabled .skill-desc {
-  color: var(--el-text-color-placeholder);
-}
-
-.skill-desc {
-  font-size: 12px;
-  color: var(--el-text-color-regular);
-  margin-top: 3px;
-  line-height: 1.5;
-}
-
-.not-allowed {
-  opacity: 0.6;
-}
-
-.not-allowed .skill-name {
-  color: var(--el-text-color-secondary) !important;
-}
-
-.not-allowed .skill-desc {
-  color: var(--el-text-color-secondary);
-}
-
-.chat-only-hint {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.hint-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 24px;
-  text-align: center;
-}
-
-.hint-icon {
-  font-size: 32px;
-}
-
-.hint-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.hint-sub {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  opacity: 0.7;
-}
-
-@media (max-width: 900px) {
-  .right-panel {
-    width: min(90vw, 380px);
-    max-width: 90vw;
-    padding: 12px;
-  }
-
-  .panel-section {
-    padding: 10px;
-    margin-bottom: 12px;
-  }
-
-  .mcp-header {
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .mcp-name,
-  .skill-name {
-    word-break: break-word;
-  }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

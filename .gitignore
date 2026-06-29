@@ -238,3 +238,4 @@ tests_my/ai_tests/
 nul
 .tmp_pytest/
 .tmp_pytest_run/
+.tmp/bfzs-runlogs

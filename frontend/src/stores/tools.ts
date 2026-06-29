@@ -56,6 +56,7 @@ export const useToolsStore = defineStore('tools', () => {
   const mcpServers = ref<McpServer[]>([])
   const skills = ref<Skill[]>([])
   const currentModel = ref('')
+  const mcpRefreshing = ref(false)
 
   const localOverrides = reactive<Record<string, boolean>>({})
 
@@ -103,9 +104,32 @@ export const useToolsStore = defineStore('tools', () => {
     }))
   })
 
+  function syncModelWithAgentDefault() {
+    const agentsStore = useAgentsStore()
+    const defaultModel = agentsStore.currentAgent?.default_model
+    if (defaultModel) {
+      currentModel.value = defaultModel
+      return
+    }
+    if (models.value.length > 0 && !currentModel.value) {
+      currentModel.value = models.value[0].id
+    }
+  }
+
   function _clearOverrides() {
     for (const key of Object.keys(localOverrides)) {
       delete localOverrides[key]
+    }
+  }
+
+  async function refreshMcpServers() {
+    mcpRefreshing.value = true
+    try {
+      mcpServers.value = await api.getMcpServers()
+    } catch (e) {
+      console.error('[ToolsStore] Failed to refresh MCP servers:', e)
+    } finally {
+      mcpRefreshing.value = false
     }
   }
 
@@ -121,13 +145,12 @@ export const useToolsStore = defineStore('tools', () => {
       models.value = modelsData
       mcpServers.value = mcpData
       skills.value = skillsData
-      if (modelsData.length > 0 && !currentModel.value) {
-        currentModel.value = modelsData[0].id
-      }
+      syncModelWithAgentDefault()
 
       const agentsStore = useAgentsStore()
       watch(() => agentsStore.currentAgentId, () => {
         _clearOverrides()
+        syncModelWithAgentDefault()
       })
     } catch (e) {
       console.error('[ToolsStore] Failed to fetch:', e)
@@ -191,8 +214,8 @@ export const useToolsStore = defineStore('tools', () => {
   }
 
   return {
-    groups, models, mcpServers, skills, currentModel,
+    groups, models, mcpServers, skills, currentModel, mcpRefreshing,
     filteredGroups, filteredMcp, filteredSkills,
-    init, toggleGroup, toggleMcp, toggleSkill, setModel,
+    init, refreshMcpServers, toggleGroup, toggleMcp, toggleSkill, setModel, syncModelWithAgentDefault,
   }
 })

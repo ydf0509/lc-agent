@@ -31,6 +31,9 @@ dev = [
     "httpx",
     "ruff",
 ]
+desktop = [
+    "pywebview>=5.0",
+]
 
 [project.scripts]
 lc-agent = "lc_agent.main:main"

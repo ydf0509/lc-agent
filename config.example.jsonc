@@ -22,7 +22,7 @@
             "models": [
                 {
                     "id": "deepseek-chat",       // 模型 ID，前端显示和切换用
-                    "context_limit": 64000,       // 上下文窗口大小（tokens）
+                    "context_limit": 64000,       // 上下文窗口大小（tokens），对应 LangChain 的 max_input_tokens
                     "max_output_tokens": 65536    // 最大输出 tokens，0 = 不限制
                 },
                 {
@@ -58,7 +58,29 @@
         // 是否启用流式输出
         "streaming": true,
         // LangGraph 最大递归步数（agent 调用工具的最大轮数），默认 100
-        "recursion_limit": 100
+        "recursion_limit": 100,
+
+        // ----- 上下文摘要（自动压缩对话历史） -----
+        // 当对话超过 trigger 阈值时，自动用 LLM 生成旧消息的摘要，
+        // 保留最近 keep 范围的消息原文，避免上下文溢出。
+        //用户需要懂 from langchain.agents.middleware.summarization import SummarizationMiddleware
+        "summarization": {
+            // 是否启用自动摘要，默认 true
+            "enabled": true,
+            // 用于生成摘要的模型 ID（留空则使用当前 agent 的模型）
+            // 建议使用便宜/快速的模型，如 deepseek-chat
+            "model": "",
+            // 触发阈值：达到此阈值时开始压缩
+            // 格式: ["fraction", 0.85] — 达到上下文窗口的 85% 时触发
+            //       ["tokens", 50000]  — 达到 50000 tokens 时触发
+            //       ["messages", 50]   — 达到 50 条消息时触发
+            "trigger": ["fraction", 0.85],
+            // 保留策略：压缩后保留多少最近的消息
+            // 格式: ["fraction", 0.20] — 保留最近 20% 的上下文窗口
+            //       ["messages", 20]   — 保留最近 20 条消息
+            //       ["tokens", 5000]   — 保留最近 5000 tokens
+            "keep": ["fraction", 0.20]
+        }
     },
 
     // ----- 数据库 -----

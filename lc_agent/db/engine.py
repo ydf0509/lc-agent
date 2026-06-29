@@ -37,10 +37,41 @@ def _to_sync_url(url: str) -> str:
     return url
 
 
+def _add_missing_columns(connection):
+    """Inspect existing tables and ALTER TABLE ADD COLUMN for any missing columns.
+
+    Handles the gap where create_all skips existing tables but migrations
+    that would have added new columns failed.
+    SQLite-specific: uses PRAGMA table_info.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    inspector = sa_inspect(connection)
+    for table in SQLModel.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing_cols = {col["name"] for col in inspector.get_columns(table.name)}
+        for col in table.columns:
+            if col.name not in existing_cols:
+                col_type = col.type.compile(connection.dialect)
+                nullable = "" if col.nullable else " NOT NULL"
+                default = ""
+                if col.server_default is not None:
+                    default = f" DEFAULT {col.server_default.arg}"
+                ddl = f"ALTER TABLE {table.name} ADD COLUMN {col.name} {col_type}{nullable}{default}"
+                try:
+                    connection.execute(text(ddl))
+                    print(f"[DB] Added missing column: {table.name}.{col.name} ({col_type})")
+                except Exception as e:
+                    print(f"[DB] Failed to add column {table.name}.{col.name}: {e}")
+
+
 async def init_db(url: str = "sqlite+aiosqlite:///./lc_agent_data.db"):
     """Run Alembic migrations to create / update all tables.
 
     Falls back to SQLModel.metadata.create_all if alembic has no revisions yet.
+    After create_all, inspects existing tables and adds any missing columns
+    (handles the case where migrations failed but tables already exist).
     """
     import lc_agent.db.models  # noqa: F401 — ensure models are registered
 
@@ -67,6 +98,7 @@ async def init_db(url: str = "sqlite+aiosqlite:///./lc_agent_data.db"):
     engine = get_async_engine(url)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(_add_missing_columns)
 
 
 def reset_engine():

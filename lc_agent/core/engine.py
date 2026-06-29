@@ -1,14 +1,18 @@
 # lc_agent/core/engine.py
 from __future__ import annotations
 
+import logging
 from typing import Any, AsyncIterator
 
 from langchain.agents.middleware import TodoListMiddleware
+from langchain.agents.middleware.summarization import SummarizationMiddleware
 
 from lc_agent.core.http_trace import get_http_trace_collector
 from lc_agent.core.http_trace_httpx import TracingAsyncClient
 from lc_agent.core.models import AgentPreset, ModelInfo
 from lc_agent.tools.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class AgentEngine:
@@ -144,6 +148,7 @@ class AgentEngine:
             kwargs["interrupt_before"] = ["tools"]
 
         middleware = [TodoListMiddleware()]
+        middleware.extend(self._build_summarization_middleware(preset))
 
         agent = create_agent(
             model=llm,
@@ -207,6 +212,44 @@ class AgentEngine:
         for m in self._models:
             if m.id == model_id:
                 return m
+        return None
+
+    def _build_summarization_middleware(self, preset: AgentPreset) -> list:
+        """Build SummarizationMiddleware based on config, returns empty list if disabled."""
+        summ_conf = self.config.get("agent", {}).get("summarization", {})
+        if not summ_conf.get("enabled", True):
+            return []
+
+        summ_model_id = summ_conf.get("model", "") or preset.default_model
+        model_info = self._find_model(summ_model_id)
+        llm = self._create_llm(model_info, summ_model_id)
+
+        trigger = self._parse_context_size(summ_conf.get("trigger")) or ("fraction", 0.85)
+        keep = self._parse_context_size(summ_conf.get("keep")) or ("fraction", 0.20)
+
+        needs_profile = trigger[0] == "fraction" or keep[0] == "fraction"
+        if needs_profile and model_info:
+            llm.profile = {"max_input_tokens": model_info.context_limit}
+
+        kwargs: dict[str, Any] = {"model": llm, "keep": keep, "trigger": trigger}
+
+        try:
+            mw = SummarizationMiddleware(**kwargs)
+            logger.info("SummarizationMiddleware enabled: trigger=%s, keep=%s", trigger, keep)
+            return [mw]
+        except Exception:
+            logger.exception("Failed to create SummarizationMiddleware")
+            return []
+
+    @staticmethod
+    def _parse_context_size(value) -> tuple | None:
+        """Parse a context size value from config (e.g. ["fraction", 0.85]) into a tuple."""
+        if value is None:
+            return None
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            kind, amount = value
+            if kind in ("fraction", "tokens", "messages"):
+                return (kind, amount)
         return None
 
     def _resolve_preset(self, preset_id: str) -> AgentPreset:

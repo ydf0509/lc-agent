@@ -44,6 +44,10 @@
 ai可以从 `D:\ProgramData\miniconda3\envs\py312\Lib\site-packages\` 目录下深入 langchain 相关的源码，包含函数入参和注释和用法。
 
 
-# 4 ai开发项目规范
-要理解并使用superpowers 的相关skills，使用2026年superpowers的最佳实践来规划和开发项目。
+# 4 理解项目定位
 
+lc-agent 是一个框架，是作为python包被导入使用。
+`D:\codes\lc-agent-bfzs` 项目是基于lc-agent框架开发的演示项目。
+`D:\codes\lc-agent-bfzs\bfzs\main.py` 是演示项目的入口文件。
+
+lc-agent-bfzs的数据库是 `D:\codes\lc-agent-bfzs\bfzs_data.db` 和 `D:\codes\lc-agent-bfzs\bfzs_checkpoints.db` 。不是在lc-agent框架的默认目录`D:\codes\lc-agent\` 下。

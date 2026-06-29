@@ -2,7 +2,10 @@
   <aside class="left-sidebar" :class="{ collapsed }">
     <div class="sidebar-header">
       <transition name="fade">
-        <span v-if="!collapsed" class="sidebar-brand">Chats</span>
+        <div v-if="!collapsed" class="sidebar-brand-wrap">
+          <span class="sidebar-brand mobile-only-brand">心有灵犀</span>
+          <span class="sidebar-brand desktop-only-brand">Chats</span>
+        </div>
       </transition>
       <div v-if="!collapsed" class="header-actions">
         <button class="action-btn" @click="toggleAllGroups" :title="allCollapsed ? '全部展开' : '全部折叠'">
@@ -268,7 +271,6 @@ async function handleRename(id: string, currentTitle: string) {
       await sessionsStore.updateTitle(id, value.trim())
     }
   } catch {
-    // cancelled
   } finally {
     openMenuSessionId.value = null
   }
@@ -345,11 +347,24 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--el-border-color);
 }
 
+.sidebar-brand-wrap {
+  display: flex;
+  align-items: center;
+}
+
 .sidebar-brand {
   font-size: 14px;
   font-weight: 700;
   color: var(--el-text-color-primary);
   letter-spacing: 0.3px;
+}
+
+.mobile-only-brand {
+  display: none;
+}
+
+.desktop-only-brand {
+  display: inline;
 }
 
 .header-actions {
@@ -636,6 +651,14 @@ onBeforeUnmount(() => {
 
   .sidebar-header {
     padding: 10px 12px;
+  }
+
+  .mobile-only-brand {
+    display: inline;
+  }
+
+  .desktop-only-brand {
+    display: none;
   }
 
   .session-list {

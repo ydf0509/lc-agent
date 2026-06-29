@@ -8,6 +8,8 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Server host (default: 127.0.0.1)")
     parser.add_argument("--port", "-p", type=int, default=8000, help="Server port (default: 8000)")
     parser.add_argument("--dotenv", help="Path to .env file")
+    parser.add_argument("--desktop", action="store_true", help="Run in desktop window mode")
+    parser.add_argument("--title", default=None, help="Desktop window title")
     args = parser.parse_args()
 
     from lc_agent.config.loader import load_config
@@ -17,7 +19,7 @@ def main():
     from lc_agent.app import LcAgentApp
 
     app = LcAgentApp(config, host=args.host, port=args.port)
-    app.run()
+    app.run(desktop=args.desktop, title=args.title)
 
 
 if __name__ == "__main__":

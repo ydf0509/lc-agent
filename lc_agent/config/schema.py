@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class ModelConfig(BaseModel):
     id: str
-    context_limit: int = 8000
+    context_limit: int = 8000  # maps to LangChain profile["max_input_tokens"]
     max_output_tokens: int = 65536
 
 

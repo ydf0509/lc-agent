@@ -142,7 +142,7 @@ app = LcAgentApp(config, host="127.0.0.1", port=8001)
 from my_agents import build_my_agent
 app.add_agent("my_agent", build_my_agent(config), description="自定义Agent")
 
-app.run()
+app.run() # 启动web服务，如果app.run(desktop=True) ，则同时启动一个桌面客户端，无需打开浏览器。
 ```
 
 ## CLI 参数

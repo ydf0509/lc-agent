@@ -373,6 +373,9 @@ export const useChatStore = defineStore('chat', () => {
         if (last.usage) {
           last.usage.toolCallCount++
         }
+        if (msg.name === 'write_todos' && msg.args?.todos) {
+          todos.value = msg.args.todos as TodoItem[]
+        }
       }
     })
 
@@ -445,10 +448,6 @@ export const useChatStore = defineStore('chat', () => {
         const sessionsStore = useSessionsStore()
         sessionsStore.updateTitleLocal(msg.thread_id, msg.title)
       }
-    })
-
-    ws.value.on('todos', (msg: WsMessage) => {
-      todos.value = ((msg as any).todos || []) as TodoItem[]
     })
 
     try {
