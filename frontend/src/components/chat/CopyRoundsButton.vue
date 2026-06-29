@@ -42,9 +42,7 @@ async function doCopy() {
     placement="bottom-end"
   >
     <template #reference>
-      <el-button size="small" text>
-        📋 复制对话
-      </el-button>
+      <button class="copy-rounds-trigger">📋 复制对话</button>
     </template>
 
     <div class="copy-rounds-panel">
@@ -83,6 +81,23 @@ async function doCopy() {
 </template>
 
 <style scoped>
+.copy-rounds-trigger {
+  border: 1px solid color-mix(in srgb, var(--el-color-success) 36%, transparent);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: color-mix(in srgb, var(--el-color-success) 18%, transparent);
+  color: var(--el-color-success);
+  white-space: nowrap;
+}
+.copy-rounds-trigger:hover {
+  background: color-mix(in srgb, var(--el-color-success) 28%, transparent);
+  border-color: color-mix(in srgb, var(--el-color-success) 50%, transparent);
+}
+
 .copy-rounds-panel {
   padding: 4px 0;
 }

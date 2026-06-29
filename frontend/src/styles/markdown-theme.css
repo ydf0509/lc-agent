@@ -360,6 +360,7 @@ html:not(.dark) .markdown-body {
   white-space: nowrap;
 }
 
+.markdown-code-expand,
 .markdown-code-copy {
   flex-shrink: 0;
   padding: 3px 8px;
@@ -373,6 +374,7 @@ html:not(.dark) .markdown-body {
   transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
+.markdown-code-expand:hover,
 .markdown-code-copy:hover,
 .markdown-code-copy.copied {
   color: var(--md-code-text);

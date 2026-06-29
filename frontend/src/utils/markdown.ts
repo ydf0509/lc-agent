@@ -28,6 +28,7 @@ function renderCodeBlock(source: string, lang: string): string {
     '<div class="markdown-code-toolbar">',
     '<span class="markdown-code-window" aria-hidden="true"><i></i><i></i><i></i></span>',
     `<span class="markdown-code-language">${escapeAttr(label)}</span>`,
+    `<button class="markdown-code-expand" type="button" data-code="${encodedSource}" data-lang="${escapeAttr(label)}" aria-label="展开源码">⛶</button>`,
     `<button class="markdown-code-copy" type="button" data-code="${encodedSource}" aria-label="复制代码">复制</button>`,
     '</div>',
     `<pre class="hljs"><code class="hljs${languageClass}">${highlighted}</code></pre>`,
