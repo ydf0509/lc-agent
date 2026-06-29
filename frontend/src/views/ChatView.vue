@@ -550,15 +550,9 @@ onBeforeUnmount(() => {
   margin-bottom: 4px;
 }
 
-.messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
-.messages-container :deep(.elx-bubble--start .elx-bubble__content) {
-  width: 100%;
-  max-width: 100% !important;
-}
-
-.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
-.messages-container :deep(.elx-bubble--end .elx-bubble__content) {
-  max-width: 100% !important;
+.messages-container :deep(.elx-bubble--start),
+.messages-container :deep(.elx-bubble--end) {
+  padding-inline: 0 !important;
 }
 
 .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
@@ -569,6 +563,17 @@ onBeforeUnmount(() => {
 .messages-container :deep(.elx-bubble__content) {
   max-width: none !important;
   min-width: 0;
+}
+
+.messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--start .elx-bubble__content) {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+.messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+.messages-container :deep(.elx-bubble--end .elx-bubble__content) {
+  max-width: 100% !important;
 }
 
 .role-avatar {
@@ -799,17 +804,51 @@ onBeforeUnmount(() => {
 
 @media (max-width: 960px) {
   .messages-container {
-    padding: 12px 10px;
+    padding: 6px 0;
     overscroll-behavior-y: contain;
   }
 
-  .messages-container :deep(.elx-bubble--start) {
-    width: min(100%, 100%) !important;
-    max-width: min(100%, 100%) !important;
+  .messages-container :deep(.elx-bubble--start),
+  .messages-container :deep(.elx-bubble--end) {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-inline: 0 !important;
   }
 
-  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
-    max-width: min(88%, 100%) !important;
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content),
+  .messages-container :deep(.elx-bubble__content) {
+    width: 100%;
+    max-width: 100% !important;
+  }
+
+  .messages-container :deep(.markdown-body),
+  .messages-container :deep(.markdown-body > *:first-child),
+  .messages-container :deep(.markdown-body > *:last-child) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-code-block),
+  .messages-container :deep(.markdown-body pre),
+  .messages-container :deep(.markdown-body table),
+  .messages-container :deep(.tool-call-card) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .thinking-summary {
+    padding: 8px 8px;
+  }
+
+  .thinking-body {
+    padding: 0 8px 10px;
+  }
+
+  .thinking-unavailable {
+    padding: 8px 8px;
   }
 
   .messages-container :deep(.elx-bubble__avatar) {
@@ -826,25 +865,77 @@ onBeforeUnmount(() => {
   }
 
   .role-model {
-    max-width: 38vw;
+    max-width: 42vw;
   }
 }
 
 @media (max-width: 560px) {
   .messages-container {
-    padding: 10px 8px;
+    padding: 4px 0;
+  }
+
+  .messages-container :deep(.elx-bubble-list__content) {
+    gap: 0 !important;
   }
 
   .messages-container :deep(.elx-bubble-list) {
     overscroll-behavior: contain;
   }
 
-  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper) {
-    max-width: min(92%, 100%) !important;
+  .messages-container :deep(.elx-bubble--start),
+  .messages-container :deep(.elx-bubble--end) {
+    padding-inline: 0 !important;
+    margin-inline: 0 !important;
+  }
+
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--start .elx-bubble__content),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content-wrapper),
+  .messages-container :deep(.elx-bubble--end .elx-bubble__content),
+  .messages-container :deep(.elx-bubble__content),
+  .messages-container :deep(.markdown-body),
+  .messages-container :deep(.tool-call-card) {
+    width: 100%;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-code-block),
+  .messages-container :deep(.markdown-body pre),
+  .messages-container :deep(.markdown-body table) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .messages-container :deep(.markdown-body > p),
+  .messages-container :deep(.markdown-body > ul),
+  .messages-container :deep(.markdown-body > ol),
+  .messages-container :deep(.markdown-body > blockquote),
+  .messages-container :deep(.markdown-body > h1),
+  .messages-container :deep(.markdown-body > h2),
+  .messages-container :deep(.markdown-body > h3),
+  .messages-container :deep(.markdown-body > h4),
+  .messages-container :deep(.markdown-body > h5),
+  .messages-container :deep(.markdown-body > h6) {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .thinking-summary {
+    padding: 7px 6px;
+  }
+
+  .thinking-body {
+    padding: 0 6px 9px;
+  }
+
+  .thinking-unavailable {
+    padding: 7px 6px;
   }
 
   .role-model {
-    max-width: 44vw;
+    max-width: 46vw;
   }
 
   .role-header {

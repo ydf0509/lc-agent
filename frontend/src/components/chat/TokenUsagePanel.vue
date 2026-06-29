@@ -10,22 +10,22 @@
     </div>
 
     <div v-if="usage.rounds.length > 0" class="usage-summary">
+      <div class="summary-card summary-card-window">
+        <div class="summary-value">{{ formatTokens(currentWindowInput) }}</div>
+        <div class="summary-label">当前窗口</div>
+      </div>
       <div class="summary-card">
         <div class="summary-value">{{ formatTokens(totalInput) }}</div>
-        <div class="summary-label">输入</div>
+        <div class="summary-label">总输入</div>
       </div>
       <div class="summary-card">
         <div class="summary-value">{{ formatTokens(totalOutput) }}</div>
-        <div class="summary-label">输出</div>
+        <div class="summary-label">总输出</div>
         <div v-if="totalReasoning > 0" class="summary-sub reasoning">Reasoning: {{ formatTokens(totalReasoning) }}</div>
       </div>
       <div class="summary-card card-cached">
         <div class="summary-value">{{ formatTokens(totalCached) }}</div>
-        <div class="summary-label">缓存</div>
-      </div>
-      <div class="summary-card">
-        <div class="summary-value">{{ formatTokens(totalAll) }}</div>
-        <div class="summary-label">Total</div>
+        <div class="summary-label">总缓存</div>
         <div v-if="usage.totalDuration" class="summary-sub time">{{ formatDuration(usage.totalDuration) }}</div>
       </div>
     </div>
@@ -44,27 +44,34 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>输入</th>
-            <th>输出</th>
-            <th>Total</th>
-            <th>Cached</th>
+            <th>当前窗口</th>
+            <th>总输入</th>
+            <th>总输出</th>
+            <th>总缓存</th>
             <th>Duration</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(round, i) in usage.rounds" :key="i">
+          <tr
+            v-for="(round, i) in usage.rounds"
+            :key="i"
+            :class="{ 'row-window-drop': isWindowDrop(i) }"
+          >
             <td class="col-num">{{ i + 1 }}</td>
+            <td>
+              {{ formatTokens(round.inputTokens) }}
+              <span v-if="isWindowDrop(i)" class="drop-indicator">↓</span>
+            </td>
             <td>{{ formatTokens(round.inputTokens) }}</td>
             <td>{{ formatTokens(round.outputTokens) }}</td>
-            <td>{{ formatTokens(round.totalTokens) }}</td>
             <td>{{ formatTokens(round.cacheReadTokens) }}</td>
             <td class="col-duration">{{ round.duration ? formatDuration(round.duration) : '-' }}</td>
           </tr>
           <tr class="row-sum">
             <td class="col-num">Sum</td>
+            <td>{{ formatTokens(currentWindowInput) }}</td>
             <td>{{ formatTokens(totalInput) }}</td>
             <td>{{ formatTokens(totalOutput) }}</td>
-            <td>{{ formatTokens(totalAll) }}</td>
             <td>{{ formatTokens(totalCached) }}</td>
             <td class="col-duration">{{ usage.totalDuration ? formatDuration(usage.totalDuration) : '-' }}</td>
           </tr>
@@ -123,15 +130,25 @@ const totalInput = computed(() =>
 const totalOutput = computed(() =>
   props.usage?.rounds.reduce((s, r) => s + r.outputTokens, 0) || 0
 )
-const totalAll = computed(() =>
-  props.usage?.rounds.reduce((s, r) => s + r.totalTokens, 0) || 0
-)
 const totalCached = computed(() =>
   props.usage?.rounds.reduce((s, r) => s + r.cacheReadTokens, 0) || 0
 )
 const totalReasoning = computed(() =>
   props.usage?.rounds.reduce((s, r) => s + (r.reasoningTokens || 0), 0) || 0
 )
+const currentWindowInput = computed(() => {
+  const rounds = props.usage?.rounds || []
+  return rounds.length > 0 ? rounds[rounds.length - 1].inputTokens : 0
+})
+
+function isWindowDrop(index: number): boolean {
+  const rounds = props.usage?.rounds || []
+  if (index <= 0 || index >= rounds.length) return false
+  const previous = rounds[index - 1]?.inputTokens || 0
+  const current = rounds[index]?.inputTokens || 0
+  if (previous <= 0 || current <= 0) return false
+  return current <= previous * 0.7
+}
 
 function formatTokens(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
@@ -245,6 +262,11 @@ function toggleToolsDetails() {
   text-align: center;
 }
 
+.summary-card-window {
+  border-color: var(--el-color-primary-light-5);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
 .summary-value {
   font-size: 18px;
   font-weight: 700;
@@ -260,171 +282,138 @@ function toggleToolsDetails() {
 }
 
 .summary-sub {
-  font-size: 10px;
-  margin-top: 2px;
-}
-
-.card-cached .summary-value {
-  color: var(--el-color-success);
-}
-
-.summary-sub.cached {
-  color: var(--el-color-success);
-}
-
-.summary-sub.reasoning {
-  color: var(--el-text-color-regular);
-}
-
-.summary-sub.time {
+  margin-top: 4px;
+  font-size: 11px;
   color: var(--el-text-color-secondary);
 }
 
-.usage-details {
+.summary-sub.reasoning {
+  color: var(--el-color-warning-dark-2);
+}
+
+.summary-sub.time {
+  color: var(--el-color-success);
+}
+
+.usage-summary-minimal {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--el-text-color-secondary);
+}
+
+.minimal-info {
+  font-size: 12px;
+}
+
+.usage-details,
+.tools-details {
   margin-top: 12px;
-  border-top: 1px solid var(--el-border-color);
-  padding-top: 10px;
-  scroll-margin: 72px 0 96px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .usage-details-enter-active,
 .usage-details-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.22s ease;
-  overflow: hidden;
+  transition: all 0.18s ease;
 }
 
 .usage-details-enter-from,
 .usage-details-leave-to {
   opacity: 0;
-  max-height: 0;
-  transform: translateY(-6px);
+  transform: translateY(-4px);
 }
 
 .usage-details-enter-to,
 .usage-details-leave-from {
   opacity: 1;
-  max-height: 420px;
   transform: translateY(0);
 }
 
 .details-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-light);
 }
 
 .detail-toggle {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
   cursor: pointer;
 }
 
-.rounds-badge {
-  font-size: 10px;
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-  padding: 1px 6px;
-  border-radius: 8px;
+.rounds-badge,
+.tools-badge {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .details-table {
   width: 100%;
   border-collapse: collapse;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 12px;
+}
+
+.details-table th,
+.details-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  text-align: left;
+  vertical-align: middle;
 }
 
 .details-table th {
   color: var(--el-text-color-secondary);
-  font-weight: 500;
-  text-align: right;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--el-border-color);
-}
-
-.details-table th:first-child {
-  text-align: left;
-}
-
-.details-table td {
-  color: var(--el-text-color-regular);
-  text-align: right;
-  padding: 4px 8px;
-}
-
-.col-num {
-  text-align: left !important;
-  color: var(--el-text-color-secondary) !important;
   font-weight: 600;
+  background: color-mix(in srgb, var(--el-fill-color-light) 70%, transparent);
 }
 
-.col-duration {
-  color: var(--el-color-warning) !important;
+.details-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .row-sum {
-  border-top: 1px solid var(--el-border-color);
-}
-
-.row-sum td {
   font-weight: 700;
-  color: var(--el-text-color-primary);
+  background: color-mix(in srgb, var(--el-color-primary-light-9) 55%, transparent);
 }
 
-.usage-summary-minimal {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+.row-window-drop {
+  background: color-mix(in srgb, var(--el-color-warning-light-9) 70%, transparent);
 }
 
-.minimal-info {
-  font-family: 'JetBrains Mono', monospace;
+.drop-indicator {
+  margin-left: 4px;
+  color: var(--el-color-warning-dark-2);
+  font-weight: 700;
 }
 
-.badge-tools {
-  cursor: pointer;
-  transition: all 0.15s ease;
+.col-num {
+  width: 52px;
 }
 
-.badge-tools:hover {
-  background: var(--el-fill-color-light);
-  transform: scale(1.05);
+.col-duration {
+  white-space: nowrap;
 }
 
-.tools-details {
-  margin-top: 12px;
-  border-top: 1px solid var(--el-border-color);
-  padding-top: 10px;
-  scroll-margin: 72px 0 96px;
-}
-
-.tools-badge {
-  font-size: 10px;
-  color: var(--el-text-color-primary);
-  background: var(--el-fill-color);
-  padding: 1px 6px;
-  border-radius: 8px;
-}
-
+.th-name,
 .col-tool-name {
-  text-align: left !important;
-  color: var(--el-color-primary) !important;
-  font-weight: 500;
-}
-
-.th-name {
-  text-align: left !important;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-dot {
   display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  margin-right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 6px;
   vertical-align: middle;
 }
 
@@ -433,10 +422,30 @@ function toggleToolsDetails() {
 }
 
 .status-dot.running {
-  background: var(--el-color-warning);
+  background: var(--el-color-primary);
 }
 
 .status-dot.error {
   background: var(--el-color-danger);
+}
+
+.status-dot.pending {
+  background: var(--el-color-warning);
+}
+
+.card-cached .summary-value {
+  color: var(--el-color-success-dark-2);
+}
+
+@media (max-width: 720px) {
+  .usage-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .details-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }
 </style>
