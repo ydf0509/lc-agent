@@ -261,11 +261,12 @@ export const useChatStore = defineStore('chat', () => {
 
   const lastMessage = computed(() => messages.value[messages.value.length - 1])
 
+  let streamStartTime = 0
+  let currentRoundStart = 0
+
   async function connect(existingThreadId?: string) {
     ws.value = new ChatWebSocket()
 
-    let streamStartTime = 0
-    let currentRoundStart = 0
     let inThinking = false
 
     ws.value.on('thinking', (msg: WsMessage) => {
@@ -416,18 +417,44 @@ export const useChatStore = defineStore('chat', () => {
       const last = messages.value[messages.value.length - 1]
       if (last) {
         last.isStreaming = false
+        const isResume = !!(msg as any).is_resume
         const usageData = (msg as any).usage as any[] | undefined
         if (usageData && usageData.length > 0) {
           if (last.usage && streamStartTime) {
             last.usage.totalDuration = Date.now() - streamStartTime
           }
           if (last.usage) {
-            mergeFinalUsageRounds(last.usage.rounds, usageData)
+            if (isResume) {
+              const offset = last.usage.rounds.length - usageData.length
+              usageData.forEach((round: any, idx: number) => {
+                const normalized = {
+                  inputTokens: round.input_tokens || 0,
+                  outputTokens: round.output_tokens || 0,
+                  totalTokens: round.total_tokens || 0,
+                  cacheReadTokens: round.cache_read_tokens || 0,
+                  reasoningTokens: round.reasoning_tokens || 0,
+                  duration: round.duration_ms || undefined,
+                }
+                const targetIdx = offset + idx
+                if (targetIdx >= 0 && last.usage!.rounds[targetIdx]) {
+                  Object.assign(last.usage!.rounds[targetIdx], normalized)
+                } else {
+                  last.usage!.rounds.push(normalized)
+                }
+              })
+            } else {
+              mergeFinalUsageRounds(last.usage.rounds, usageData)
+            }
           }
         }
         const rawTraces = (msg as any).http_traces || (msg as any).httpTraces
         if (rawTraces) {
-          last.httpTraces = normalizeHttpTraces(rawTraces)
+          const newTraces = normalizeHttpTraces(rawTraces) || []
+          if (isResume && newTraces.length) {
+            last.httpTraces = [...(last.httpTraces || []), ...newTraces]
+          } else if (newTraces.length) {
+            last.httpTraces = newTraces
+          }
           if (last.httpTraces?.length) {
             last.content = ensureHttpMarkers(last.content, last.httpTraces.length)
           }
@@ -529,6 +556,7 @@ export const useChatStore = defineStore('chat', () => {
     ws.value?.sendInterruptResume(resumeValue, presetId, model)
     interrupt.value = null
     isStreaming.value = true
+    currentRoundStart = Date.now()
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {
       last.isStreaming = true

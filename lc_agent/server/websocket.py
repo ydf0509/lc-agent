@@ -199,6 +199,15 @@ class ChatWebSocketHandler:
             preset_id = data.get("preset_id", "__chat__")
             model_id = data.get("model", "")
             self._cancel_flags[thread_id] = False
+            usage_rounds: list[dict] = []
+            round_start_time = time.time()
+            stream_start_time = time.time()
+            assistant_content_parts: list[str] = []
+            assistant_in_thinking = False
+
+            existing_tool_calls, existing_trace_count = await self._load_resume_context(thread_id)
+            assistant_tool_calls: list[dict[str, Any]] = list(existing_tool_calls)
+
             try:
                 from langgraph.types import Command
 
@@ -214,17 +223,45 @@ class ChatWebSocketHandler:
                 else:
                     resume_value = {"approved": approved}
 
-                async for event in agent.astream_events(
-                    Command(resume=resume_value),
-                    config=config,
-                    version="v2",
-                ):
-                    if self._cancel_flags.get(thread_id):
-                        await websocket.send_json({"type": "cancelled"})
-                        return
-                    await self._send_event(websocket, event)
+                model_info = self.engine._find_model(model_id) if model_id else None
+                provider = model_info.provider if model_info else None
+                resolved_model = model_info.id if model_info else model_id
+                trace_collector = HttpTraceCollector(
+                    provider=provider, model=resolved_model, seq_offset=existing_trace_count,
+                )
+                trace_token = bind_http_trace_collector(trace_collector)
+                try:
+                    async for event in agent.astream_events(
+                        Command(resume=resume_value),
+                        config=config,
+                        version="v2",
+                    ):
+                        if self._cancel_flags.get(thread_id):
+                            await websocket.send_json({"type": "cancelled"})
+                            return
+                        assistant_in_thinking = self._accumulate_assistant_display_state(
+                            event,
+                            assistant_content_parts,
+                            assistant_tool_calls,
+                            assistant_in_thinking,
+                        )
+                        await self._send_event(websocket, event)
+                        prev_len = len(usage_rounds)
+                        self._accumulate_usage(event, usage_rounds)
+                        if len(usage_rounds) > prev_len:
+                            usage_rounds[-1]["duration_ms"] = int((time.time() - round_start_time) * 1000)
+                            round_start_time = time.time()
+                            await websocket.send_json({
+                                "type": "llm_usage",
+                                **usage_rounds[-1],
+                            })
+                finally:
+                    reset_http_trace_collector(trace_token)
 
-                # Check for new interrupts after resume
+                if assistant_in_thinking:
+                    assistant_content_parts.append("<!--THINK_END-->")
+
+                interrupt_sent = False
                 try:
                     graph_state = await agent.aget_state(config)
                     if graph_state.tasks:
@@ -241,11 +278,32 @@ class ChatWebSocketHandler:
                                 "message": "Tool requires approval",
                                 "data": all_interrupts,
                             })
+                            interrupt_sent = True
                 except Exception as e:
                     print(f"[WS] Failed to check interrupt state after resume: {e}")
 
-                await websocket.send_json({"type": "done"})
+                http_traces = trace_collector.snapshot()
+                done_payload: dict = {"type": "done", "is_resume": True}
+                if usage_rounds:
+                    done_payload["usage"] = usage_rounds
+                if http_traces:
+                    done_payload["http_traces"] = http_traces
+
+                new_content = "".join(assistant_content_parts)
+                if new_content or assistant_tool_calls or usage_rounds or http_traces:
+                    await self._append_to_last_assistant_message(
+                        thread_id,
+                        new_content,
+                        all_tool_calls=assistant_tool_calls or None,
+                        usage_rounds=usage_rounds or None,
+                        http_traces=http_traces or None,
+                        resume_duration_ms=int((time.time() - stream_start_time) * 1000),
+                    )
+
+                await websocket.send_json(done_payload)
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 await websocket.send_json({"type": "error", "message": str(e)})
 
     async def _ensure_session(self, thread_id: str, title: str, agent_id: str, model: str):
@@ -376,6 +434,71 @@ class ChatWebSocketHandler:
         except Exception as e:
             print(f"[WS] Failed to truncate UI messages for {thread_id}: {e}")
 
+    async def _load_resume_context(self, thread_id: str) -> tuple[list[dict[str, Any]], int]:
+        """Load tool_calls and http_traces count from the last assistant message for interrupt continuation."""
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import ChatUiMessageRepository
+
+            session = get_async_session(self.db_url)
+            try:
+                repo = ChatUiMessageRepository(session)
+                last_msg = await repo.get_last_assistant(thread_id)
+                if last_msg is None:
+                    return [], 0
+                return list(last_msg.tool_calls or []), len(last_msg.http_traces or [])
+            finally:
+                await session.close()
+        except Exception:
+            return [], 0
+
+    async def _append_to_last_assistant_message(
+        self,
+        thread_id: str,
+        content: str,
+        *,
+        all_tool_calls: list[dict[str, Any]] | None = None,
+        usage_rounds: list[dict] | None = None,
+        http_traces: list[dict[str, Any]] | None = None,
+        resume_duration_ms: int = 0,
+    ):
+        """Update the last assistant message after interrupt resume.
+
+        ``all_tool_calls`` replaces the entire tool_calls array (it already
+        contains both pre-interrupt tools with updated statuses and new tools).
+        """
+        try:
+            from lc_agent.db.engine import get_async_session
+            from lc_agent.db.repository import ChatUiMessageRepository
+
+            session = get_async_session(self.db_url)
+            try:
+                repo = ChatUiMessageRepository(session)
+                last_msg = await repo.get_last_assistant(thread_id)
+                if last_msg is None:
+                    return
+
+                if content:
+                    last_msg.content = (last_msg.content or "") + content
+                if all_tool_calls is not None:
+                    last_msg.tool_calls = all_tool_calls
+                if usage_rounds:
+                    old = last_msg.usage or {}
+                    last_msg.usage = {
+                        **old,
+                        "rounds": (old.get("rounds") or []) + usage_rounds,
+                        "tool_call_count": len(all_tool_calls or []),
+                        "total_duration_ms": (old.get("total_duration_ms") or 0) + resume_duration_ms,
+                    }
+                if http_traces:
+                    last_msg.http_traces = (last_msg.http_traces or []) + list(http_traces)
+                session.add(last_msg)
+                await session.commit()
+            finally:
+                await session.close()
+        except Exception as e:
+            print(f"[WS] Failed to update last assistant message for {thread_id}: {e}")
+
     def _accumulate_assistant_display_state(
         self,
         event: dict,
@@ -438,15 +561,16 @@ class ChatWebSocketHandler:
                 result_str = str(raw_output)
             run_id = event.get("run_id", "")
             name = event.get("name", "")
-            tool_call = next(
-                (
-                    tc
-                    for tc in tool_calls
-                    if (run_id and tc.get("runId") == run_id)
-                    or (not run_id and tc.get("name") == name and tc.get("status") == "running")
-                ),
-                None,
-            )
+            tool_call = None
+            if run_id:
+                tool_call = next(
+                    (tc for tc in tool_calls if tc.get("runId") == run_id), None,
+                )
+            if tool_call is None:
+                tool_call = next(
+                    (tc for tc in tool_calls if tc.get("name") == name and tc.get("status") == "running"),
+                    None,
+                )
             if tool_call:
                 start_time = tool_call.get("startTime")
                 tool_call["result"] = result_str

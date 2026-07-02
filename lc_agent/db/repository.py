@@ -157,6 +157,15 @@ class ChatUiMessageRepository:
         await self.session.commit()
         return len(rows[start_idx:])
 
+    async def get_last_assistant(self, session_id: str) -> ChatUiMessage | None:
+        result = await self.session.execute(
+            select(ChatUiMessage)
+            .where(ChatUiMessage.session_id == session_id, ChatUiMessage.role == "assistant")
+            .order_by(ChatUiMessage.created_at.desc(), ChatUiMessage.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def count_by_session(self, session_id: str) -> int:
         result = await self.session.execute(
             select(func.count()).select_from(ChatUiMessage).where(ChatUiMessage.session_id == session_id)

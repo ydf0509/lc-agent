@@ -1,11 +1,15 @@
 # lc_agent/tools/registry.py
 from __future__ import annotations
 
+import asyncio
 import functools
+import inspect
 import re
-from typing import Any, Callable, overload
+from typing import Any, Callable, Literal, overload
 
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools.base import ArgsSchema
 
 _TOOL_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -72,18 +76,40 @@ class ToolRegistry:
                 groups[g] = self._group_descriptions.get(g, g)
         return [{"id": gid, "description": desc} for gid, desc in sorted(groups.items())]
 
-    def register(self, func: Callable, group: str = "", group_description: str = "", name: str = "") -> BaseTool:
+    def register(
+        self,
+        func: Callable,
+        *,
+        name: str = "",
+        group: str = "",
+        group_description: str = "",
+        description: str | None = None,
+        return_direct: bool = False,
+        args_schema: ArgsSchema | None = None,
+        infer_schema: bool = True,
+        response_format: Literal["content", "content_and_artifact"] = "content",
+        parse_docstring: bool = False,
+        error_on_invalid_docstring: bool = True,
+        extras: dict[str, Any] | None = None,
+    ) -> BaseTool:
         """Register a function as a tool.
 
+        Accepts all official langchain_core @tool parameters plus lc-agent
+        extensions (group, group_description).
+
         Args:
-            func: The function to register as a tool.
-            group: ASCII group identifier for filtering/categorization.
-                   Used as name prefix (group__func_name) only when `name` is not set.
-                   Must match ^[a-zA-Z0-9_-]+$ if provided.
-            group_description: Human-readable group description for UI display.
-                   If not provided, defaults to the group value.
-            name: Explicit tool name. Takes highest priority over group+func naming.
-                  Must match ^[a-zA-Z0-9_-]+$ if provided.
+            func: The function to register.
+            name: Explicit tool name.  Priority: name > group__func_name > func_name.
+            group: ASCII group id for filtering.  Must match ^[a-zA-Z0-9_-]+$.
+            group_description: Human-readable group label for the UI.
+            description: Override tool description (otherwise uses docstring).
+            return_direct: Return result directly without continuing agent loop.
+            args_schema: Custom Pydantic schema for tool input.
+            infer_schema: Infer schema from function signature.
+            response_format: ``"content"`` or ``"content_and_artifact"``.
+            parse_docstring: Parse param descriptions from Google-style docstring.
+            error_on_invalid_docstring: Raise on bad docstring when parse_docstring=True.
+            extras: Provider-specific extra fields (e.g. Anthropic cache_control).
         """
         if group and not _TOOL_NAME_PATTERN.match(group):
             raise ValueError(
@@ -113,49 +139,146 @@ class ToolRegistry:
         if group and group_description:
             self._group_descriptions[group] = group_description
 
-        lc_tool = StructuredTool.from_function(
-            func=func,
-            name=resolved_name,
-            description=func.__doc__ or f"Tool: {resolved_name}",
-        )
+        from_fn_kwargs: dict[str, Any] = {
+            "name": resolved_name,
+            "description": description or func.__doc__ or f"Tool: {resolved_name}",
+            "return_direct": return_direct,
+            "infer_schema": infer_schema,
+            "response_format": response_format,
+            "parse_docstring": parse_docstring,
+            "error_on_invalid_docstring": error_on_invalid_docstring,
+        }
+        if args_schema is not None:
+            from_fn_kwargs["args_schema"] = args_schema
+
+        if inspect.iscoroutinefunction(func):
+            from_fn_kwargs["coroutine"] = func
+        else:
+            from_fn_kwargs["func"] = func
+
+        lc_tool = StructuredTool.from_function(**from_fn_kwargs)
+
+        if extras:
+            lc_tool.metadata = {**(lc_tool.metadata or {}), "extras": extras}
+
         self._global_tools[resolved_name] = {"tool": lc_tool, "group": group, "func": func}
         return lc_tool
 
 
+# ---------------------------------------------------------------------------
+# @tool decorator — fully compatible with langchain_core.tools.convert.tool
+# ---------------------------------------------------------------------------
+
 @overload
-def tool(func: Callable) -> Callable: ...
-
+def tool(name_or_callable: Callable, /) -> Callable: ...
 
 @overload
-def tool(*, name: str = "", group: str = "", group_description: str = "") -> Callable[[Callable], Callable]: ...
+def tool(
+    name_or_callable: str,
+    *,
+    description: str | None = ...,
+    return_direct: bool = ...,
+    args_schema: ArgsSchema | None = ...,
+    infer_schema: bool = ...,
+    response_format: Literal["content", "content_and_artifact"] = ...,
+    parse_docstring: bool = ...,
+    error_on_invalid_docstring: bool = ...,
+    extras: dict[str, Any] | None = ...,
+    group: str = ...,
+    group_description: str = ...,
+) -> Callable[[Callable], Callable]: ...
+
+@overload
+def tool(
+    *,
+    name: str = ...,
+    description: str | None = ...,
+    return_direct: bool = ...,
+    args_schema: ArgsSchema | None = ...,
+    infer_schema: bool = ...,
+    response_format: Literal["content", "content_and_artifact"] = ...,
+    parse_docstring: bool = ...,
+    error_on_invalid_docstring: bool = ...,
+    extras: dict[str, Any] | None = ...,
+    group: str = ...,
+    group_description: str = ...,
+) -> Callable[[Callable], Callable]: ...
 
 
-def tool(func: Callable | None = None, *, name: str = "", group: str = "", group_description: str = ""):
-    """Decorator to register a function as an agent tool.
+def tool(
+    name_or_callable: str | Callable | None = None,
+    *,
+    name: str = "",
+    description: str | None = None,
+    return_direct: bool = False,
+    args_schema: ArgsSchema | None = None,
+    infer_schema: bool = True,
+    response_format: Literal["content", "content_and_artifact"] = "content",
+    parse_docstring: bool = False,
+    error_on_invalid_docstring: bool = True,
+    extras: dict[str, Any] | None = None,
+    group: str = "",
+    group_description: str = "",
+):
+    """Register a function as an agent tool.
 
-    Name resolution priority: name > group__func_name > func_name.
+    Fully compatible with ``langchain_core.tools.convert.tool`` parameter
+    names and calling conventions, with additional ``group`` / ``group_description``
+    extensions for lc-agent's tool-group system.
 
-    Usage:
-        @tool
+    Supported calling patterns (same as official @tool)::
+
+        @tool                                   # bare decorator
         def my_func(...): ...
 
-        @tool(name="ask_user")
+        @tool("custom_name")                    # positional string → name
+        def my_func(...): ...
+
+        @tool(name="ask_user")                  # keyword name
         def ask_user_impl(...): ...
+
+        @tool(description="...", parse_docstring=True)
+        def my_func(...): ...
+
+    lc-agent extensions::
 
         @tool(group="file_mgmt", group_description="文件管理")
         def my_func(...): ...
+
+    Name resolution: name (kwarg) > name_or_callable (str) > group__func > func.
     """
     registry = ToolRegistry()
 
+    resolved_name = name
+    if not resolved_name and isinstance(name_or_callable, str):
+        resolved_name = name_or_callable
+
     def decorator(fn: Callable) -> Callable:
-        registry.register(fn, group=group, group_description=group_description, name=name)
+        registry.register(
+            fn,
+            name=resolved_name,
+            group=group,
+            group_description=group_description,
+            description=description,
+            return_direct=return_direct,
+            args_schema=args_schema,
+            infer_schema=infer_schema,
+            response_format=response_format,
+            parse_docstring=parse_docstring,
+            error_on_invalid_docstring=error_on_invalid_docstring,
+            extras=extras,
+        )
 
         @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs):
             return fn(*args, **kwargs)
 
-        return wrapper
+        @functools.wraps(fn)
+        async def async_wrapper(*args, **kwargs):
+            return await fn(*args, **kwargs)
 
-    if func is not None:
-        return decorator(func)
+        return async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
+
+    if callable(name_or_callable):
+        return decorator(name_or_callable)
     return decorator

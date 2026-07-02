@@ -132,10 +132,10 @@ class _PendingTrace:
 
 
 class HttpTraceCollector:
-    def __init__(self, *, provider: str | None, model: str | None):
+    def __init__(self, *, provider: str | None, model: str | None, seq_offset: int = 0):
         self.provider = provider
         self.model = model
-        self._seq = 0
+        self._seq = seq_offset
         self._traces: list[_PendingTrace] = []
 
     def start_request(
