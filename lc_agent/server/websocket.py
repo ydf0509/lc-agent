@@ -14,6 +14,137 @@ from lc_agent.core.http_trace import (
 )
 
 
+def _categorize_error(error: Exception) -> dict:
+    """Categorize an exception into structured Chinese error info for the frontend."""
+    msg = str(error)
+    msg_lower = msg.lower()
+
+    # --- Authentication errors ---
+    if any(k in msg_lower for k in (
+        "401", "unauthorized", "authentication", "api key",
+        "incorrect api", "invalid key", "auth failed",
+        "credentials",
+    )):
+        return {
+            "title": "API 密钥认证失败",
+            "detail": "AI 模型的 API 密钥无效或未授权，请求被拒绝。",
+            "suggestions": [
+                "检查配置文件中的 API Key 是否正确",
+                "确认 API Key 是否有对应模型的访问权限",
+                "如已更换密钥，请更新配置后重试",
+            ],
+            "error_code": "AUTH_FAILED",
+        }
+
+    # --- Rate limiting ---
+    if any(k in msg_lower for k in ("429", "rate limit", "too many requests", "rate_limit")):
+        return {
+            "title": "请求频率超限",
+            "detail": "向 AI 模型的请求频率超过限制，已被暂时限流。",
+            "suggestions": [
+                "等待一段时间后重试",
+                "降低请求并发数",
+                "联系服务商提升配额",
+            ],
+            "error_code": "RATE_LIMITED",
+        }
+
+    # --- Model not found ---
+    if any(k in msg_lower for k in ("model not found", "does not exist", "model `")):
+        return {
+            "title": "模型不存在或不可用",
+            "detail": f"请求的 AI 模型不存在或当前不可用。\n{msg}",
+            "suggestions": [
+                "检查选择的模型名称是否正确",
+                "确认该模型在 API 服务商处可用",
+                "尝试切换其他模型",
+            ],
+            "error_code": "MODEL_NOT_FOUND",
+        }
+
+    # --- Connection refused / failed ---
+    if any(k in msg_lower for k in (
+        "connection refused", "connection error", "connection failed",
+        "cannot connect", "connectionreset", "connection_reset",
+        "connect failed", "no route to host", "name or service not known",
+        "getaddrinfo failed",
+    )):
+        return {
+            "title": "模型服务器连接失败",
+            "detail": "无法连接到 AI 模型服务器，请检查网络或服务器状态。",
+            "suggestions": [
+                "检查服务器地址和端口是否正确",
+                "确认 AI 模型网关服务是否在运行",
+                "检查防火墙或网络代理设置",
+            ],
+            "error_code": "CONNECTION_FAILED",
+        }
+
+    # --- Timeout ---
+    if any(k in msg_lower for k in ("timeout", "timed out")):
+        return {
+            "title": "模型请求超时",
+            "detail": "AI 模型响应时间过长，请求已超时。",
+            "suggestions": [
+                "检查网络连接是否稳定",
+                "稍后重试",
+                "如持续超时，尝试切换其他模型或联系管理员",
+            ],
+            "error_code": "TIMEOUT",
+        }
+
+    # --- Quota / billing ---
+    if any(k in msg_lower for k in (
+        "quota", "insufficient_quota", "billing", "credit balance",
+        "balance", "insufficient", "payment required", "402",
+        "quota exceeded", "out of quota",
+    )):
+        return {
+            "title": "账户余额不足",
+            "detail": "API 调用因账户余额或配额不足而被拒绝。",
+            "suggestions": [
+                "检查 API 账户余额是否充足",
+                "充值后重新尝试",
+                "联系服务商调整配额限制",
+            ],
+            "error_code": "INSUFFICIENT_QUOTA",
+        }
+
+    # --- Server error (5xx) ---
+    if any(k in msg_lower for k in ("502", "503", "504", "bad gateway",
+                                      "service unavailable", "server error")):
+        return {
+            "title": "模型服务暂时不可用",
+            "detail": "AI 模型服务端返回了服务不可用错误，可能是暂时性故障。",
+            "suggestions": [
+                "等待几秒后重试",
+                "如持续不可用，联系服务商或管理员",
+            ],
+            "error_code": "SERVER_UNAVAILABLE",
+        }
+
+    # --- Content policy ---
+    if any(k in msg_lower for k in ("content_filter", "safety", "content_policy",
+                                      "content_moderation", "flagged")):
+        return {
+            "title": "内容被安全策略拦截",
+            "detail": "请求内容被 AI 模型的安全审查机制拦截。",
+            "suggestions": [
+                "修改输入内容后重试",
+                "避免使用敏感或违规词汇",
+            ],
+            "error_code": "CONTENT_FILTERED",
+        }
+
+    # --- Default fallback ---
+    return {
+        "title": "AI 模型接口请求失败",
+        "detail": msg,
+        "suggestions": ["请稍后重试，如问题持续请联系管理员"],
+        "error_code": "UNKNOWN_ERROR",
+    }
+
+
 class ChatWebSocketHandler:
     """Handles WebSocket connections for streaming chat."""
 
@@ -108,11 +239,10 @@ class ChatWebSocketHandler:
                                 **usage_rounds[-1],
                             })
                 finally:
+                    if assistant_in_thinking:
+                        assistant_content_parts.append("<!--THINK_END-->")
+                        assistant_in_thinking = False
                     reset_http_trace_collector(trace_token)
-
-                if assistant_in_thinking:
-                    assistant_content_parts.append("<!--THINK_END-->")
-                    assistant_in_thinking = False
 
                 # Check for pending interrupts via graph state
                 # (astream_events v2 does NOT surface __interrupt__ in on_chain_end)
@@ -190,7 +320,13 @@ class ChatWebSocketHandler:
                 print(f"[WS] handle_message error: {e}")
                 traceback.print_exc()
                 try:
-                    await websocket.send_json({"type": "error", "message": str(e)})
+                    error_info = _categorize_error(e)
+                    error_info["tech_detail"] = str(e)
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e),
+                        **error_info,
+                    })
                 except Exception:
                     pass
 
@@ -213,7 +349,15 @@ class ChatWebSocketHandler:
 
                 agent = self.engine._get_or_build_agent(preset_id, model_id)
                 if agent is None:
-                    await websocket.send_json({"type": "error", "message": "No agent found for resume"})
+                    await websocket.send_json({
+                        "type": "error",
+                        "title": "缺少 AI 代理配置",
+                        "detail": "没有找到用于恢复对话的 AI 代理配置，可能是配置已变更。",
+                        "suggestions": ["刷新页面后重试", "重新选择 AI 助手并开始新对话"],
+                        "error_code": "AGENT_NOT_FOUND",
+                        "tech_detail": "No agent found for resume",
+                        "message": "No agent found for resume",
+                    })
                     return
 
                 config = {"configurable": {"thread_id": thread_id}, "recursion_limit": self.engine.recursion_limit}
@@ -256,10 +400,10 @@ class ChatWebSocketHandler:
                                 **usage_rounds[-1],
                             })
                 finally:
+                    if assistant_in_thinking:
+                        assistant_content_parts.append("<!--THINK_END-->")
+                        assistant_in_thinking = False
                     reset_http_trace_collector(trace_token)
-
-                if assistant_in_thinking:
-                    assistant_content_parts.append("<!--THINK_END-->")
 
                 interrupt_sent = False
                 try:
@@ -304,7 +448,16 @@ class ChatWebSocketHandler:
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                await websocket.send_json({"type": "error", "message": str(e)})
+                try:
+                    error_info = _categorize_error(e)
+                    error_info["tech_detail"] = str(e)
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e),
+                        **error_info,
+                    })
+                except Exception:
+                    pass
 
     async def _ensure_session(self, thread_id: str, title: str, agent_id: str, model: str):
         """Create session metadata on first websocket message if it does not exist."""

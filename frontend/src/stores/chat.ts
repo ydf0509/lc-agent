@@ -49,6 +49,14 @@ export interface HttpTrace {
   error?: string | null
 }
 
+export interface ErrorInfo {
+  title: string
+  detail: string
+  suggestions?: string[]
+  techDetail?: string
+  errorCode?: string
+}
+
 export interface ContentSegment {
   type: 'text' | 'tool'
   text?: string
@@ -258,6 +266,7 @@ export const useChatStore = defineStore('chat', () => {
   const interrupt = ref<InterruptInfo | null>(null)
   const ws = ref<ChatWebSocket | null>(null)
   const todos = ref<TodoItem[]>([])
+  const errorMessage = ref<ErrorInfo | null>(null)
 
   const lastMessage = computed(() => messages.value[messages.value.length - 1])
 
@@ -413,6 +422,7 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     ws.value.on('done', (msg: WsMessage) => {
+      errorMessage.value = null
       isStreaming.value = false
       const last = messages.value[messages.value.length - 1]
       if (last) {
@@ -463,6 +473,7 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     ws.value.on('cancelled', () => {
+      errorMessage.value = null
       isStreaming.value = false
       const last = messages.value[messages.value.length - 1]
       if (last) last.isStreaming = false
@@ -470,6 +481,7 @@ export const useChatStore = defineStore('chat', () => {
 
     ws.value.on('disconnected', () => {
       if (ws.value?.connected) return
+      errorMessage.value = null
       isConnected.value = false
       isStreaming.value = false
       threadId.value = null
@@ -477,9 +489,41 @@ export const useChatStore = defineStore('chat', () => {
       if (last) last.isStreaming = false
     })
 
-    ws.value.on('error', (msg: WsMessage) => {
+    ws.value.on('error', (msg: any) => {
       isStreaming.value = false
-      console.error('[Chat] Error:', msg.message)
+      // Close any open thinking section in the current message
+      if (inThinking) {
+        const last = messages.value[messages.value.length - 1]
+        if (last && last.role === 'assistant') {
+          last.content += '<!--THINK_END-->'
+        }
+        inThinking = false
+      }
+      // Stop streaming animation on last assistant message
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.isStreaming = false
+      }
+      // Store structured error info for UI display
+      if (msg.title) {
+        // Structured error from backend
+        errorMessage.value = {
+          title: msg.title,
+          detail: msg.detail || '',
+          suggestions: msg.suggestions,
+          techDetail: msg.tech_detail,
+          errorCode: msg.error_code,
+        }
+      } else {
+        // Fallback: unstructured error message
+        errorMessage.value = {
+          title: 'AI 模型接口请求失败',
+          detail: msg.message || '',
+          suggestions: ['请稍后重试，如问题持续请联系管理员'],
+          errorCode: 'UNKNOWN',
+        }
+      }
+      console.error('[Chat] Error:', msg.message || msg.title)
     })
 
     ws.value.on('history', (msg: WsMessage) => {
@@ -512,6 +556,7 @@ export const useChatStore = defineStore('chat', () => {
   ) {
     if (!content.trim()) return
 
+    errorMessage.value = null
     const sessionsStore = useSessionsStore()
     const sessionId = sessionsStore.currentSessionId
     if (sessionId && sessionsStore.isLocalSession(sessionId)) {
@@ -593,6 +638,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function disconnect() {
     ws.value?.disconnect()
+    errorMessage.value = null
     isConnected.value = false
     isStreaming.value = false
     threadId.value = null
@@ -607,6 +653,7 @@ export const useChatStore = defineStore('chat', () => {
     interrupt,
     lastMessage,
     todos,
+    errorMessage,
     connect,
     loadMessages,
     sendMessage,

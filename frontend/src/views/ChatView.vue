@@ -123,7 +123,7 @@
         </template>
       </BubbleList>
       <Thinking
-        v-if="isLoading && !isStreaming"
+        v-if="isLoading && !isStreaming && !errorMessage"
         status="thinking"
         content=""
       />
@@ -154,13 +154,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
 import { Cpu, User } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useChatStore } from '@/stores/chat'
-import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace } from '@/stores/chat'
+import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace, ErrorInfo } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
@@ -197,7 +198,7 @@ type ChatBubbleItem = BubbleListItemProps & {
 const chatStore = useChatStore()
 const agentsStore = useAgentsStore()
 const toolsStore = useToolsStore()
-const { messages, isStreaming, interrupt } = storeToRefs(chatStore)
+const { messages, isStreaming, interrupt, errorMessage } = storeToRefs(chatStore)
 const editingMessageId = ref<string | null>(null)
 const editingContent = ref('')
 const codeModalVisible = ref(false)
@@ -414,6 +415,55 @@ function handleSend(content: string) {
 function handleStop() {
   chatStore.stopGeneration()
 }
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+let lastNotificationId: ReturnType<typeof ElMessage> | null = null
+
+function showErrorNotification(error: ErrorInfo) {
+  if (lastNotificationId) {
+    lastNotificationId.close()
+    lastNotificationId = null
+  }
+
+  const t = escapeHtml(error.title)
+  const d = escapeHtml(error.detail)
+  const suggestions = error.suggestions?.map(s => `<li>${escapeHtml(s)}</li>`).join('') || ''
+  const tech = error.techDetail ? escapeHtml(error.techDetail) : ''
+
+  lastNotificationId = ElMessage({
+    type: 'error',
+    dangerouslyUseHTMLString: true,
+    showClose: true,
+    duration: 0,
+    grouping: true,
+    message: `<div style="line-height:1.5;max-width:420px">
+      <strong style="font-size:15px">${t}</strong>
+      <div style="margin:6px 0 10px;font-size:13px;color:var(--el-text-color-regular)">${d}</div>
+      ${suggestions ? `<div style="font-size:12px;color:var(--el-text-color-secondary)">
+        <strong>建议：</strong>
+        <ul style="margin:4px 0 0;padding-left:18px;line-height:1.6">${suggestions}</ul></div>` : ''}
+      ${tech ? `<details style="margin-top:10px;font-size:11px;color:var(--el-text-color-placeholder)">
+        <summary style="cursor:pointer">技术详情</summary>
+        <pre style="margin:6px 0 0;padding:8px;background:var(--el-fill-color-light);border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow-y:auto">${tech}</pre>
+      </details>` : ''}
+    </div>`,
+    onClose: () => { lastNotificationId = null },
+  })
+}
+
+watch(errorMessage, (newError) => {
+  if (newError) {
+    showErrorNotification(newError)
+  }
+})
 
 function handleInterruptDecide(decision: { type: string }) {
   chatStore.respondToInterrupt(decision.type === 'approve', agentsStore.currentAgentId)
@@ -985,4 +1035,5 @@ onBeforeUnmount(() => {
     font-size: 12px;
   }
 }
+
 </style>
