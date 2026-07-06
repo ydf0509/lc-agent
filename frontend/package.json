@@ -19,6 +19,7 @@
     "test:session-pinning": "node scripts/check-session-pinning-contract.mjs",
     "test:session-route": "node scripts/check-session-route-restore-contract.mjs",
     "test:restart-bfzs": "node scripts/check-restart-bfzs-contract.mjs",
+    "test:sub-agent": "node scripts/check-sub-agent-contract.mjs",
     "test:favicon": "node scripts/check-favicon-contract.mjs",
     "test:responsive": "node scripts/check-responsive-layout.mjs",
     "test:chat-http-data": "node scripts/check-chat-http-data-contract.mjs",

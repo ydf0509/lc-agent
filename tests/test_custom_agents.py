@@ -115,6 +115,34 @@ async def test_api_custom_agent_not_deletable(tmp_path):
 
 
 
+def test_add_agent_wraps_graph_with_lc_agent_name_metadata():
+    """add_agent should call with_config on graphs that support Runnable metadata."""
+    from lc_agent.app import LcAgentApp
+
+    wrapped = None
+
+    class GraphWithConfig:
+        async def ainvoke(self, *args, **kwargs):
+            return {"messages": []}
+
+        async def astream_events(self, *args, **kwargs):
+            if False:
+                yield {}
+
+        def with_config(self, config):
+            nonlocal wrapped
+            wrapped = config
+            return self
+
+    app = LcAgentApp({"agent": {"default_model": "model-a"}})
+    graph = GraphWithConfig()
+    app.add_agent("research", graph, "Research graph")
+
+    assert wrapped is not None
+    assert wrapped["metadata"]["lc_agent_name"] == "research"
+    assert wrapped["run_name"] == "research"
+
+
 def test_add_agent_marks_code_agent_as_self_contained():
     from lc_agent.app import LcAgentApp
 

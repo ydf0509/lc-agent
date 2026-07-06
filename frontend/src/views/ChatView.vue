@@ -1,6 +1,53 @@
 <template>
   <div class="chat-view">
-    <div ref="messagesContainerRef" class="messages-container">
+    <div v-if="viewingSubAgentRunId" class="sub-agent-detail-view">
+      <div class="sub-agent-detail-header">
+        <el-button size="small" @click="handleBackToMainChat">
+          ← 返回主对话
+        </el-button>
+        <span v-if="subAgentRun" class="sub-agent-detail-title">
+          子Agent: {{ subAgentRun.sub_agent_name || subAgentRun.sub_agent_id }}
+        </span>
+        <span v-else-if="loadingSubAgent" class="sub-agent-detail-title">
+          加载中...
+        </span>
+      </div>
+      <div v-if="loadingSubAgent" class="sub-agent-detail-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>加载子Agent执行过程...</span>
+      </div>
+      <div v-else-if="subAgentEvents.length === 0" class="sub-agent-detail-empty">
+        暂无执行事件
+      </div>
+      <div v-else class="sub-agent-events">
+        <div
+          v-for="event in subAgentEvents"
+          :key="event.id"
+          class="sub-agent-event-item"
+          :class="'event-' + event.event_type.replace(/^on_/, '')"
+        >
+          <div class="event-header">
+            <span class="event-type-badge">{{ event.event_type }}</span>
+            <span class="event-seq">#{{ event.sequence }}</span>
+          </div>
+          <div v-if="event.event_type === 'on_chat_model_stream'" class="event-preview">
+            <span class="event-text">{{ event.payload?.data?.chunk?.content || event.payload?.data?.chunk || '' }}</span>
+          </div>
+          <div v-else-if="event.event_type === 'on_tool_start'" class="event-preview">
+            <span class="event-tool-name">{{ event.payload?.name || event.payload?.data?.name }}()</span>
+            <span class="event-args">{{ JSON.stringify(event.payload?.data?.input || event.payload?.data || {}) }}</span>
+          </div>
+          <div v-else-if="event.event_type === 'on_tool_end'" class="event-preview">
+            <span class="event-result-tag">结果</span>
+            <span class="event-text">{{ String(event.payload?.data?.output || '').slice(0, 200) }}</span>
+          </div>
+          <div v-else class="event-preview">
+            <span class="event-text">{{ JSON.stringify(event.payload?.data || event.payload || {}).slice(0, 200) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="messages-container">
       <Welcome
         v-if="messages.length === 0 && !isLoading"
         title="Start a conversation"
@@ -87,6 +134,11 @@
                     v-if="item.toolCalls[seg.toolIndex!]?.name === 'write_todos'"
                     :tool-call="item.toolCalls[seg.toolIndex!]"
                   />
+                  <SubAgentCard
+                    v-else-if="item.toolCalls[seg.toolIndex!]?.name === 'task' && item.toolCalls[seg.toolIndex!]?.subAgentId"
+                    :tool-call="item.toolCalls[seg.toolIndex!]"
+                    @view-detail="handleViewSubAgentDetail"
+                  />
                   <ToolCallCard
                     v-else
                     :tool-call="item.toolCalls[seg.toolIndex!]"
@@ -149,6 +201,7 @@
     </div>
 
     <ChatInput
+      v-if="!viewingSubAgentRunId"
       :is-streaming="isStreaming"
       :edit-content="editingContent"
       :is-editing="Boolean(editingMessageId)"
@@ -185,7 +238,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { BubbleList, Thinking, Welcome } from 'vue-element-plus-x'
 import type { BubbleListItemProps } from 'vue-element-plus-x/types/BubbleList'
-import { Cpu, User } from '@element-plus/icons-vue'
+import { Cpu, User, Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useChatStore } from '@/stores/chat'
 import type { ToolCall, MessageUsage, ReplayMessage, HttpTrace, ErrorInfo } from '@/stores/chat'
@@ -194,8 +247,9 @@ import { useToolsStore } from '@/stores/tools'
 import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
-import ToolCallCard from '@/components/chat/ToolCallCard.vue'
 import TodoProgressCard from '@/components/chat/TodoProgressCard.vue'
+import ToolCallCard from '@/components/chat/ToolCallCard.vue'
+import SubAgentCard from '@/components/chat/SubAgentCard.vue'
 import HttpTracesGroup from '@/components/chat/HttpTracesGroup.vue'
 import TokenUsagePanel from '@/components/chat/TokenUsagePanel.vue'
 import MessageToolbar from '@/components/chat/MessageToolbar.vue'
@@ -549,7 +603,43 @@ function handleInterruptDecide(decision: { type: string }) {
 }
 
 function handleInterruptResume(value: any) {
-  chatStore.resumeInterrupt(value, agentsStore.currentAgentId, toolsStore.currentModel, toolsStore.llmParams)
+  (chatStore as any).resumeInterrupt(value, agentsStore.currentAgentId, toolsStore.currentModel, toolsStore.llmParams)
+}
+
+const viewingSubAgentRunId = ref<string | null>(null)
+const subAgentEvents = ref<any[]>([])
+const subAgentRun = ref<any>(null)
+const loadingSubAgent = ref(false)
+
+async function handleViewSubAgentDetail(runId: string) {
+  if (!runId) return
+  loadingSubAgent.value = true
+  viewingSubAgentRunId.value = runId
+  try {
+    const runResp = await fetch(`/api/sub-agent-runs/${runId}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+    })
+    if (runResp.ok) {
+      subAgentRun.value = await runResp.json()
+    }
+    const eventsResp = await fetch(`/api/sub-agent-runs/${runId}/events`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+    })
+    if (eventsResp.ok) {
+      const data = await eventsResp.json()
+      subAgentEvents.value = data.events || []
+    }
+  } catch (e) {
+    console.error('[SubAgent] Failed to load details:', e)
+  } finally {
+    loadingSubAgent.value = false
+  }
+}
+
+function handleBackToMainChat() {
+  viewingSubAgentRunId.value = null
+  subAgentRun.value = null
+  subAgentEvents.value = []
 }
 
 function getCodeToCopy(button: HTMLButtonElement): string {
@@ -1161,4 +1251,103 @@ onBeforeUnmount(() => {
   }
 }
 
+.sub-agent-detail-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 16px;
+}
+.sub-agent-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--el-border-color);
+  margin-bottom: 12px;
+}
+.sub-agent-detail-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.sub-agent-detail-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--el-text-color-secondary);
+}
+.sub-agent-detail-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-placeholder);
+}
+.sub-agent-events {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sub-agent-event-item {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-lighter);
+}
+.event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.event-type-badge {
+  font-size: 10px;
+  font-family: monospace;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+.event-seq {
+  font-size: 10px;
+  color: var(--el-text-color-placeholder);
+}
+.event-preview {
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+.event-tool-name {
+  font-weight: 600;
+  color: var(--el-color-warning);
+  margin-right: 4px;
+}
+.event-args {
+  color: var(--el-text-color-secondary);
+  font-family: monospace;
+  font-size: 11px;
+}
+.event-result-tag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+  margin-right: 4px;
+}
+.event-text {
+  word-break: break-all;
+}
+.event-chat_model_stream {
+  border-left: 2px solid var(--el-color-primary);
+}
+.event-tool_start {
+  border-left: 2px solid var(--el-color-warning);
+}
+.event-tool_end {
+  border-left: 2px solid var(--el-color-success);
+}
 </style>

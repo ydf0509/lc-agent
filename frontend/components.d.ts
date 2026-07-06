@@ -53,6 +53,7 @@ declare module 'vue' {
     RightPanel: typeof import('./src/components/layout/RightPanel.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    SubAgentCard: typeof import('./src/components/chat/SubAgentCard.vue')['default']
     TodoList: typeof import('./src/components/panels/TodoList.vue')['default']
     TodoProgressCard: typeof import('./src/components/chat/TodoProgressCard.vue')['default']
     TokenUsagePanel: typeof import('./src/components/chat/TokenUsagePanel.vue')['default']

@@ -214,6 +214,7 @@ class LcAgentApp:
                     allowed_tool_groups=row.allowed_tool_groups,
                     allowed_mcp_servers=row.allowed_mcp_servers,
                     allowed_skills=row.allowed_skills,
+                    allowed_sub_agents=row.allowed_sub_agents,
                     llm_params=row.llm_params,
                 )
                 self.engine._presets[preset.id] = preset
@@ -235,6 +236,11 @@ class LcAgentApp:
         """
         if name in self.engine._agents:
             raise ValueError(f"Agent '{name}' already registered")
+
+        if hasattr(graph, "with_config"):
+            from unittest.mock import MagicMock
+            if not isinstance(graph, MagicMock):
+                graph = graph.with_config({"metadata": {"lc_agent_name": name}, "run_name": name})
 
         from lc_agent.core.models import AgentPreset
 

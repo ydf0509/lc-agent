@@ -33,6 +33,7 @@ class AgentPreset(BaseModel):
     allowed_tool_groups: list[str] | None = None
     allowed_mcp_servers: list[str] | None = None
     allowed_skills: list[str] | None = None
+    allowed_sub_agents: list[str] | None = None
 
     llm_params: dict | None = None
 

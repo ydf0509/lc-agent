@@ -87,6 +87,10 @@ export interface ToolCall {
   startTime?: number
   duration?: number
   resultLength?: number
+  // Sub-agent summary fields
+  subAgentId?: string
+  taskDescription?: string
+  finalResult?: string
 }
 
 export interface InterruptInfo {
@@ -418,6 +422,83 @@ export const useChatStore = defineStore('chat', () => {
           tc.status = 'done'
           tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
           tc.resultLength = msg.result?.length || 0
+        }
+      }
+    })
+
+    client.on('sub_agent_call', (msg: SseMessage) => {
+      if (!isStreaming.value) {
+        isStreaming.value = true
+        streamStartTime = Date.now()
+        currentRoundStart = Date.now()
+        messages.value.push({
+          id: createClientId(),
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+          isStreaming: true,
+          usage: { rounds: [], toolCallCount: 0 },
+        })
+      }
+      const last = messages.value[messages.value.length - 1]
+      if (last && last.role === 'assistant') {
+        if (inThinking) {
+          inThinking = false
+          last.content += '<!--THINK_END-->'
+        }
+        if (!last.toolCalls) last.toolCalls = []
+
+        const existing = last.toolCalls.find(
+          t => t.name === 'task' && t.runId === msg.parent_tool_run_id,
+        )
+        if (existing) {
+          existing.startTime = Date.now()
+          return
+        }
+
+        const tcIdx = last.toolCalls.length
+        const tc: ToolCall = {
+          name: 'task',
+          runId: msg.parent_tool_run_id,
+          subAgentId: msg.sub_agent_id,
+          taskDescription: msg.task_description,
+          status: 'running',
+          startTime: Date.now(),
+        }
+        last.toolCalls.push(tc)
+        last.content += `\n<!--TOOL:${tcIdx}-->\n`
+        if (last.usage) {
+          last.usage.toolCallCount++
+        }
+      }
+    })
+
+    client.on('sub_agent_done', (msg: SseMessage) => {
+      const last = messages.value[messages.value.length - 1]
+      if (last?.toolCalls) {
+        const tc = last.toolCalls.find(
+          t => t.name === 'task' && t.runId === msg.parent_tool_run_id,
+        )
+        if (tc) {
+          tc.result = msg.summary
+          tc.status = 'done'
+          tc.finalResult = msg.final_result
+          tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
+          tc.resultLength = msg.summary?.length || 0
+        }
+      }
+    })
+
+    client.on('sub_agent_error', (msg: SseMessage) => {
+      const last = messages.value[messages.value.length - 1]
+      if (last?.toolCalls) {
+        const tc = last.toolCalls.find(
+          t => t.name === 'task' && t.runId === msg.parent_tool_run_id,
+        )
+        if (tc) {
+          tc.result = msg.summary
+          tc.status = 'error'
+          tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
         }
       }
     })

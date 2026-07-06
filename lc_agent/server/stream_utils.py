@@ -54,23 +54,45 @@ def convert_stream_event(event: dict) -> list[tuple[str, dict]]:
         tool_input = event.get("data", {}).get("input", {})
         if not isinstance(tool_input, (dict, list, str, int, float, bool, type(None))):
             tool_input = str(tool_input)
-        results.append(("tool_call", {
-            "name": tool_name,
-            "run_id": event.get("run_id", ""),
-            "args": tool_input,
-        }))
+
+        if tool_name == "task" and isinstance(tool_input, dict) and "subagent_type" in tool_input:
+            results.append(("sub_agent_call", {
+                "parent_tool_run_id": event.get("run_id", ""),
+                "sub_agent_id": tool_input.get("subagent_type", ""),
+                "sub_agent_name": tool_input.get("subagent_type", ""),
+                "task_description": str(tool_input.get("description", "")),
+                "status": "running",
+                "depth": 1,
+            }))
+        else:
+            results.append(("tool_call", {
+                "name": tool_name,
+                "run_id": event.get("run_id", ""),
+                "args": tool_input,
+            }))
 
     elif kind == "on_tool_end":
         tool_name = event.get("name", "")
         output = event.get("data", {}).get("output", "")
-        if hasattr(output, "content"):
+        if isinstance(output, dict):
+            result_str = str(output.get("content", str(output)))
+        elif hasattr(output, "content"):
             result_str = output.content if isinstance(output.content, str) else str(output.content)
         else:
             result_str = str(output)
-        results.append(("tool_result", {
-            "name": tool_name,
-            "result": result_str,
-        }))
+
+        if tool_name == "task":
+            results.append(("sub_agent_done", {
+                "parent_tool_run_id": event.get("run_id", ""),
+                "status": "done",
+                "summary": result_str[:200],
+                "final_result": result_str,
+            }))
+        else:
+            results.append(("tool_result", {
+                "name": tool_name,
+                "result": result_str,
+            }))
 
     return results
 

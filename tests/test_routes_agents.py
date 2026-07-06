@@ -89,6 +89,42 @@ async def test_update_agent(app_and_headers):
 
 
 @pytest.mark.asyncio
+async def test_agent_presets_persist_allowed_sub_agents(app_and_headers):
+    app, headers = app_and_headers
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        body = {
+            "name": "Coordinator",
+            "system_prompt": "Coordinate work.",
+            "default_model": "",
+            "allowed_tool_groups": [],
+            "allowed_mcp_servers": [],
+            "allowed_skills": [],
+            "allowed_sub_agents": ["research_assistant"],
+            "llm_params": None,
+        }
+
+        create_resp = await client.post("/api/agents", headers=headers, json=body)
+        assert create_resp.status_code == 201
+        created = create_resp.json()
+        assert created["allowed_sub_agents"] == ["research_assistant"]
+
+        agent_id = created["id"]
+        update_resp = await client.put(
+            f"/api/agents/{agent_id}",
+            headers=headers,
+            json={"allowed_sub_agents": []},
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["allowed_sub_agents"] == []
+
+        list_resp = await client.get("/api/agents", headers=headers)
+        assert list_resp.status_code == 200
+        listed = next(agent for agent in list_resp.json() if agent["id"] == agent_id)
+        assert listed["allowed_sub_agents"] == []
+
+
+@pytest.mark.asyncio
 async def test_update_agent_invalidates_model_variant_cache(app_and_headers):
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)

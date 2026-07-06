@@ -80,6 +80,7 @@ class AgentEngine:
                 allowed_tool_groups=[],
                 allowed_mcp_servers=[],
                 allowed_skills=[],
+                allowed_sub_agents=[],
                 source="builtin",
                 default_enabled=False,
             ),
@@ -91,6 +92,7 @@ class AgentEngine:
                 allowed_tool_groups=None,
                 allowed_mcp_servers=None,
                 allowed_skills=[],
+                allowed_sub_agents=[],
                 source="builtin",
                 default_enabled=False,
             ),
@@ -192,11 +194,16 @@ class AgentEngine:
             if interrupt_on:
                 middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
 
+        subagent_middleware = self._build_subagent_middleware(preset)
+        if subagent_middleware is not None:
+            middleware.append(subagent_middleware)
+
         agent = create_agent(
             model=llm,
             tools=tools,
             system_prompt=system_prompt,
             middleware=middleware,
+            name=preset.id,
             **kwargs,
         )
 
@@ -314,6 +321,52 @@ class AgentEngine:
             if kind in ("fraction", "tokens", "messages"):
                 return (kind, amount)
         return None
+
+    def _allowed_subagent_ids(self, preset: AgentPreset) -> list[str]:
+        if preset.allowed_sub_agents == []:
+            return []
+        all_ids = [p.id for p in self.get_presets() if p.id != preset.id]
+        if preset.allowed_sub_agents is None:
+            return all_ids
+        return [agent_id for agent_id in preset.allowed_sub_agents if agent_id in all_ids and agent_id != preset.id]
+
+    def _build_subagent_middleware(self, preset: AgentPreset):
+        if preset.source == "code":
+            return None
+        ids = self._allowed_subagent_ids(preset)
+        if not ids:
+            return None
+        from lc_agent.core.subagents import SubAgentMiddleware
+        # 构建子Agent时，强制禁用其子Agent能力（防止递归）
+        subagents = {agent_id: self._get_or_build_agent_as_subagent(agent_id) for agent_id in ids}
+        names = {agent_id: self._resolve_preset(agent_id).name for agent_id in ids}
+        db_url = self.config.get("database", {}).get("url", "sqlite+aiosqlite:///./lc_agent_data.db")
+        return SubAgentMiddleware(
+            parent_agent_id=preset.id,
+            subagents=subagents,
+            subagent_names=names,
+            db_url=db_url,
+            max_depth=self.config.get("agent", {}).get("max_subagent_depth", 3),
+        )
+
+    def _get_or_build_agent_as_subagent(self, preset_id: str) -> Runnable:
+        """构建子Agent，强制禁用其子Agent能力"""
+        preset = self._resolve_preset(preset_id)
+        # 创建一个不允许子Agent的副本
+        sub_preset = AgentPreset(
+            id=preset.id,
+            name=preset.name,
+            system_prompt=preset.system_prompt,
+            default_model=preset.default_model,
+            allowed_tool_groups=preset.allowed_tool_groups,
+            allowed_mcp_servers=preset.allowed_mcp_servers,
+            allowed_skills=preset.allowed_skills,
+            allowed_sub_agents=[],  # 强制禁用子Agent
+            llm_params=preset.llm_params,
+            source=preset.source,
+            default_enabled=preset.default_enabled,
+        )
+        return self.build_agent(sub_preset)
 
     def _resolve_preset(self, preset_id: str) -> AgentPreset:
         """Resolve a preset ID to an AgentPreset object."""

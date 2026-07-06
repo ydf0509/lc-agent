@@ -161,6 +161,28 @@
           </div>
         </div>
       </el-form-item>
+
+      <el-form-item label="允许的子Agent">
+        <div class="tool-group-select">
+          <el-radio-group v-model="subAgentMode" size="small">
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="none">无</el-radio-button>
+            <el-radio-button value="custom">自定义</el-radio-button>
+          </el-radio-group>
+          <div v-if="subAgentMode === 'custom'" class="custom-groups">
+            <el-checkbox-group v-model="selectedSubAgents">
+              <el-checkbox
+                v-for="agent in agentsStore.agents.filter(a => a.id !== editingId)"
+                :key="agent.id"
+                :value="agent.id"
+              >
+                {{ agent.name }}
+                <el-tag size="small" style="margin-left:4px">{{ agent.source }}</el-tag>
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
+        </div>
+      </el-form-item>
     </el-form>
 
     <div v-else class="code-agent-readonly">
@@ -215,6 +237,8 @@ const mcpMode = ref<'all' | 'none' | 'custom'>('all')
 const selectedMcpServers = ref<string[]>([])
 const skillsMode = ref<'all' | 'none' | 'custom'>('all')
 const selectedSkills = ref<string[]>([])
+const subAgentMode = ref<'all' | 'none' | 'custom'>('none')
+const selectedSubAgents = ref<string[]>([])
 
 const isCodeAgent = ref(false)
 
@@ -268,6 +292,17 @@ function open(agent?: AgentPreset) {
       skillsMode.value = 'custom'
       selectedSkills.value = [...agent.allowed_skills]
     }
+
+    if (agent.allowed_sub_agents === null) {
+      subAgentMode.value = 'all'
+      selectedSubAgents.value = []
+    } else if (agent.allowed_sub_agents.length === 0) {
+      subAgentMode.value = 'none'
+      selectedSubAgents.value = []
+    } else {
+      subAgentMode.value = 'custom'
+      selectedSubAgents.value = [...agent.allowed_sub_agents]
+    }
   } else {
     isEdit.value = false
     editingId.value = ''
@@ -280,6 +315,8 @@ function open(agent?: AgentPreset) {
     selectedMcpServers.value = []
     skillsMode.value = 'all'
     selectedSkills.value = []
+    subAgentMode.value = 'none'
+    selectedSubAgents.value = []
   }
   visible.value = true
 }
@@ -302,6 +339,11 @@ async function handleSave() {
       skillsMode.value === 'none' ? [] :
       selectedSkills.value
 
+    const allowed_sub_agents =
+      subAgentMode.value === 'all' ? null :
+      subAgentMode.value === 'none' ? [] :
+      selectedSubAgents.value
+
     const data = {
       name: form.value.name,
       system_prompt: form.value.system_prompt,
@@ -309,6 +351,7 @@ async function handleSave() {
       allowed_tool_groups,
       allowed_mcp_servers,
       allowed_skills,
+      allowed_sub_agents,
       llm_params: form.value.llm_params || null,
     }
 

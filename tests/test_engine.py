@@ -133,6 +133,35 @@ class TestAgentEngine:
         assert preset.system_prompt == "You are a helpful assistant. Respond in the user's language."
         assert preset.default_model == "test-model"
 
+    def test_build_agent_passes_preset_id_as_langchain_agent_name(self, monkeypatch):
+        from lc_agent.core.engine import AgentEngine
+
+        captured = {}
+
+        def fake_create_agent(**kwargs):
+            captured.update(kwargs)
+            return object()
+
+        monkeypatch.setattr("langchain.agents.create_agent", fake_create_agent)
+        engine = AgentEngine({"agent": {"default_model": "model-a"}, "provider": {}})
+        monkeypatch.setattr(engine, "_create_llm", lambda *args, **kwargs: object())
+        monkeypatch.setattr(engine, "_build_summarization_middleware", lambda preset: [])
+        preset = AgentPreset(id="planner", name="Planner", system_prompt="Plan", default_model="model-a")
+
+        engine.build_agent(preset)
+
+        assert captured["name"] == "planner"
+
+    def test_builtin_presets_define_default_sub_agent_policy(self, sample_config):
+        from lc_agent.core.engine import AgentEngine
+
+        engine = AgentEngine(sample_config)
+        presets = {preset.id: preset for preset in engine.get_builtin_presets()}
+
+        assert presets["__chat__"].allowed_sub_agents == []
+        assert presets["__empty__"].allowed_sub_agents == []
+        assert presets["__power__"].allowed_sub_agents is None
+
     def test_model_override_uses_separate_agent_cache_key(self, sample_config, monkeypatch):
         from lc_agent.core.engine import AgentEngine
 

@@ -30,6 +30,13 @@ export interface SseMessage {
   detail?: string
   suggestions?: string[]
   tech_detail?: string
+  // sub-agent fields
+  parent_tool_run_id?: string
+  sub_agent_id?: string
+  sub_agent_name?: string
+  task_description?: string
+  summary?: string
+  final_result?: string
 }
 
 export type SseEventHandler = (msg: SseMessage) => void

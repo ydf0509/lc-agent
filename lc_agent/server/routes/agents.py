@@ -32,6 +32,7 @@ class AgentCreateRequest(BaseModel):
     allowed_tool_groups: list[str] | None = None
     allowed_mcp_servers: list[str] | None = None
     allowed_skills: list[str] | None = None
+    allowed_sub_agents: list[str] | None = None
     llm_params: dict | None = None
 
 
@@ -42,6 +43,7 @@ class AgentUpdateRequest(BaseModel):
     allowed_tool_groups: list[str] | None = None
     allowed_mcp_servers: list[str] | None = None
     allowed_skills: list[str] | None = None
+    allowed_sub_agents: list[str] | None = None
     llm_params: dict | None = None
 
 
@@ -55,6 +57,7 @@ def _preset_to_dict(p: AgentPreset) -> dict:
             "allowed_tool_groups": [],
             "allowed_mcp_servers": [],
             "allowed_skills": [],
+            "allowed_sub_agents": [],
             "source": "code",
             "default_enabled": False,
         }
@@ -66,6 +69,7 @@ def _preset_to_dict(p: AgentPreset) -> dict:
         "allowed_tool_groups": p.allowed_tool_groups,
         "allowed_mcp_servers": p.allowed_mcp_servers,
         "allowed_skills": p.allowed_skills,
+        "allowed_sub_agents": p.allowed_sub_agents,
         "llm_params": p.llm_params,
         "source": p.source,
         "default_enabled": p.default_enabled,
@@ -98,6 +102,7 @@ async def list_agents(
             "allowed_tool_groups": row.allowed_tool_groups,
             "allowed_mcp_servers": row.allowed_mcp_servers,
             "allowed_skills": row.allowed_skills,
+            "allowed_sub_agents": row.allowed_sub_agents,
             "llm_params": row.llm_params,
             "source": "user",
             "default_enabled": True,
@@ -128,6 +133,7 @@ async def create_agent(
         allowed_tool_groups=body.allowed_tool_groups,
         allowed_mcp_servers=body.allowed_mcp_servers,
         allowed_skills=body.allowed_skills,
+        allowed_sub_agents=body.allowed_sub_agents,
         llm_params=body.llm_params,
     )
     db.add(preset_db)
@@ -142,6 +148,7 @@ async def create_agent(
         allowed_tool_groups=preset_db.allowed_tool_groups,
         allowed_mcp_servers=preset_db.allowed_mcp_servers,
         allowed_skills=preset_db.allowed_skills,
+        allowed_sub_agents=preset_db.allowed_sub_agents,
         llm_params=preset_db.llm_params,
     )
     engine._presets[preset.id] = preset
@@ -192,6 +199,7 @@ async def update_agent(
         allowed_tool_groups=preset_db.allowed_tool_groups,
         allowed_mcp_servers=preset_db.allowed_mcp_servers,
         allowed_skills=preset_db.allowed_skills,
+        allowed_sub_agents=preset_db.allowed_sub_agents,
         llm_params=preset_db.llm_params,
     )
     engine._presets[preset.id] = preset
