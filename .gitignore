@@ -244,3 +244,4 @@ nul
 .tmp/bfzs-runlogs
 .tmp/*
 gitigonre_file1.txt
+.workbuddy/
