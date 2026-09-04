@@ -79,13 +79,34 @@ class FilteredSkillLoader(SkillLoader):
         """Directories scanned for global skills."""
         return list(self._global_skill_dirs)
 
-    def set_project_overlay(self, project_skills_dir: str | None) -> None:
-        """Set or clear a project-level skills directory overlay."""
-        if project_skills_dir and Path(project_skills_dir).is_dir():
-            from langchain_agentskills.loaders import DirectorySkillLoader
-            self._project_loader = DirectorySkillLoader(project_skills_dir)
-        else:
+    def set_project_overlay(self, dirs: str | list[str] | None) -> None:
+        """Set or clear the overlay skills directories.
+
+        Accepts a single directory or a list of directories. On name conflicts
+        earlier directories win (CompositeSkillLoader: first has highest priority).
+        Missing directories are skipped silently.
+        """
+        if isinstance(dirs, str):
+            dirs = [dirs]
+        loaders: list[SkillLoader] = []
+        if dirs:
+            from langchain_agentskills.loaders import CompositeSkillLoader, DirectorySkillLoader
+
+            for d in dirs:
+                if not isinstance(d, str):
+                    continue
+                d = d.strip()
+                if not d:
+                    continue
+                resolved = Path(d).expanduser()
+                if resolved.is_dir():
+                    loaders.append(DirectorySkillLoader(str(resolved)))
+        if not loaders:
             self._project_loader = None
+        elif len(loaders) == 1:
+            self._project_loader = loaders[0]
+        else:
+            self._project_loader = CompositeSkillLoader(loaders)
 
     def is_enabled(self, name: str) -> bool:
         return name not in self._disabled

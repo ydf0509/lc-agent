@@ -76,6 +76,7 @@
             <span class="skill-picker-description">{{ getSkillDescription(skill.description) }}</span>
           </span>
           <span v-if="skill.scope === 'project'" class="skill-picker-scope">项目</span>
+          <span v-else-if="skill.scope === 'extra'" class="skill-picker-scope">额外</span>
         </button>
         <div v-if="skillSuggestions.length === 0" class="skill-picker-empty">没有匹配的 Skill</div>
       </div>

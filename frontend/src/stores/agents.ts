@@ -24,6 +24,7 @@ export interface AgentPreset {
   project_mode?: boolean
   project_root?: string | null
   project_extra_dirs?: string[] | null
+  extra_skill_dirs?: string[] | null
 }
 
 const BUILTIN_IDS = new Set(['chat', 'empty', 'power'])

@@ -246,6 +246,7 @@ class LcAgentApp:
                     project_mode=row.project_mode,
                     project_root=row.project_root,
                     project_extra_dirs=row.project_extra_dirs,
+                    extra_skill_dirs=row.extra_skill_dirs,
                     extra_system_prompts=extra,
                 )
                 self.engine._presets[preset.id] = preset

@@ -46,8 +46,13 @@ export const api = {
   refreshMcpServers: () => fetchApi<any[]>('/mcp/refresh', { method: 'POST' }),
   refreshMcpServer: (name: string) => fetchApi<any>(`/mcp/${name}/refresh`, { method: 'POST' }),
   toggleMcpServer: (name: string) => fetchApi<{ name: string; enabled: boolean }>(`/mcp/${name}/toggle`, { method: 'POST' }),
-  getSkills: (projectRoot?: string) => {
-    const qs = projectRoot ? `?project_root=${encodeURIComponent(projectRoot)}` : ''
+  getSkills: (projectRoot?: string, extraDirs?: string[]) => {
+    const params: string[] = []
+    if (projectRoot) params.push(`project_root=${encodeURIComponent(projectRoot)}`)
+    for (const d of extraDirs || []) {
+      if (d && d.trim()) params.push(`extra_dirs=${encodeURIComponent(d.trim())}`)
+    }
+    const qs = params.length > 0 ? `?${params.join('&')}` : ''
     return fetchApi<any[]>(`/skills${qs}`)
   },
   getSkillDetail: (name: string) => fetchApi<any>(`/skills/${name}`),

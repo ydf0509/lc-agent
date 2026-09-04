@@ -36,6 +36,22 @@ _AGENT_NAME_ERROR = (
 )
 
 
+def _clean_extra_skill_dirs(value: list[str] | None) -> list[str] | None:
+    """Trim/dedupe extra skill dirs; reject non-absolute paths."""
+    if value is None:
+        return None
+    cleaned: list[str] = []
+    for d in value:
+        d = d.strip()
+        if not d:
+            continue
+        if not Path(d).expanduser().is_absolute():
+            raise ValueError(f"自定义 Skills 目录必须使用绝对路径: {d}")
+        if d not in cleaned:
+            cleaned.append(d)
+    return cleaned or None
+
+
 class AgentCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,6 +68,7 @@ class AgentCreateRequest(BaseModel):
     project_mode: bool = False
     project_root: str | None = None
     project_extra_dirs: list[str] | None = None
+    extra_skill_dirs: list[str] | None = None
 
     @field_validator("name")
     @classmethod
@@ -74,6 +91,11 @@ class AgentCreateRequest(BaseModel):
             seen_ids.add(item.agent_id)
         return value
 
+    @field_validator("extra_skill_dirs")
+    @classmethod
+    def validate_extra_skill_dirs(cls, value: list[str] | None) -> list[str] | None:
+        return _clean_extra_skill_dirs(value)
+
 
 class AgentUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -91,6 +113,7 @@ class AgentUpdateRequest(BaseModel):
     project_mode: bool | None = None
     project_root: str | None = None
     project_extra_dirs: list[str] | None = None
+    extra_skill_dirs: list[str] | None = None
 
     @field_validator("name")
     @classmethod
@@ -98,6 +121,11 @@ class AgentUpdateRequest(BaseModel):
         if v is not None and not _AGENT_NAME_PATTERN.match(v):
             raise ValueError(_AGENT_NAME_ERROR)
         return v
+
+    @field_validator("extra_skill_dirs")
+    @classmethod
+    def validate_extra_skill_dirs(cls, value: list[str] | None) -> list[str] | None:
+        return _clean_extra_skill_dirs(value)
 
     @field_validator("subagents")
     @classmethod
@@ -173,6 +201,7 @@ async def list_agents(
             "project_mode": row.project_mode,
             "project_root": row.project_root,
             "project_extra_dirs": row.project_extra_dirs,
+            "extra_skill_dirs": row.extra_skill_dirs,
         })
 
     if user.role != "admin":
@@ -222,6 +251,18 @@ def _validate_project_paths_or_raise(
         )
 
 
+def _validate_extra_skill_dirs_or_raise(extra_skill_dirs: list[str] | None) -> None:
+    """Raise HTTPException(422) if extra skill dirs do not exist."""
+    if not extra_skill_dirs:
+        return
+    missing = [d for d in extra_skill_dirs if not _path_exists(d)]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"以下自定义 Skills 目录不存在或不是目录: {' | '.join(missing)}",
+        )
+
+
 class CheckPathsRequest(BaseModel):
     paths: list[str] = []
 
@@ -252,6 +293,7 @@ async def create_agent(
     """Create a new agent preset (persisted to DB)."""
     _validate_subagent_ids_exist(engine, body.subagents)
     _validate_project_paths_or_raise(body.project_mode, body.project_root, body.project_extra_dirs)
+    _validate_extra_skill_dirs_or_raise(body.extra_skill_dirs)
     preset_db = AgentPresetDB(
         id=str(uuid.uuid4()),
         name=body.name,
@@ -267,6 +309,7 @@ async def create_agent(
         project_mode=body.project_mode,
         project_root=body.project_root,
         project_extra_dirs=body.project_extra_dirs,
+        extra_skill_dirs=body.extra_skill_dirs,
     )
     db.add(preset_db)
     await db.commit()
@@ -287,6 +330,7 @@ async def create_agent(
         project_mode=preset_db.project_mode,
         project_root=preset_db.project_root,
         project_extra_dirs=preset_db.project_extra_dirs,
+        extra_skill_dirs=preset_db.extra_skill_dirs,
     )
     engine._presets[preset.id] = preset
 
@@ -377,6 +421,7 @@ async def update_agent(
     merged_root = update_data.get("project_root", preset_db.project_root)
     merged_extra = update_data.get("project_extra_dirs", preset_db.project_extra_dirs)
     _validate_project_paths_or_raise(merged_mode, merged_root, merged_extra)
+    _validate_extra_skill_dirs_or_raise(update_data.get("extra_skill_dirs", preset_db.extra_skill_dirs))
 
     for key, value in update_data.items():
         setattr(preset_db, key, value)
@@ -400,6 +445,7 @@ async def update_agent(
         project_mode=preset_db.project_mode,
         project_root=preset_db.project_root,
         project_extra_dirs=preset_db.project_extra_dirs,
+        extra_skill_dirs=preset_db.extra_skill_dirs,
         extra_system_prompts=extra,
     )
     engine._presets[preset.id] = preset

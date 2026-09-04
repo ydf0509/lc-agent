@@ -106,6 +106,7 @@ class AgentPresetDB(SQLModel, table=True):
     )
     project_root: str | None = Field(default=None)
     project_extra_dirs: list[str] | None = Field(default=None, sa_column=Column(JSON))
+    extra_skill_dirs: list[str] | None = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 

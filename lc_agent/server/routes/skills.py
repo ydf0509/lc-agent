@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from langchain_agentskills import SkillsToolkit
 
@@ -34,15 +34,18 @@ def _resolve_skill_path(skill_name: str, search_dirs: list[str]) -> str | None:
 def list_skills(
     request: Request,
     project_root: str | None = None,
+    extra_dirs: list[str] = Query(default=[]),
     user: User = Depends(get_current_user),
 ):
     """List all skills with their enabled state (tier 1 metadata).
 
-    When ``project_root`` is supplied the response is split into two scopes:
-    - ``scope="project"``  — skills found in ``{project_root}/.agents/skills/``
-    - ``scope="global"``   — all other skills from the global loader
+    Scopes in the response:
+    - ``scope="project"`` — skills found in ``{project_root}/.agents/skills/`` (when ``project_root`` is given)
+    - ``scope="extra"``   — skills from explicitly supplied ``extra_dirs`` (repeatable query param)
+    - ``scope="global"``  — all other skills from the global loader
 
-    Without ``project_root`` all skills are returned with ``scope="global"``.
+    On name conflicts the runtime priority is: project > extra > global;
+    the listing mirrors that (later scopes skip names already claimed).
     """
     loader = _get_loader(request)
     if loader is None:
@@ -50,6 +53,7 @@ def list_skills(
 
     result: list[dict] = []
     project_skill_names: set[str] = set()
+    extra_skill_names: set[str] = set()
 
     if project_root:
         # Normalize the path to handle ~, relative paths, and cross-platform separators
@@ -78,6 +82,41 @@ def list_skills(
                     "Failed to scan project skills at %s", project_skills_dir, exc_info=True
                 )
 
+    # Explicit extra skill directories (per-preset config, scanned read-only)
+    if extra_dirs:
+        from langchain_agentskills.loaders import DirectorySkillLoader
+
+        for d in extra_dirs:
+            if not isinstance(d, str):
+                continue
+            d = d.strip()
+            if not d:
+                continue
+            resolved = Path(d).expanduser()
+            if not resolved.is_dir():
+                continue
+            try:
+                dir_skills = DirectorySkillLoader(str(resolved)).list_skills()
+            except Exception:
+                logger.warning("Failed to scan extra skills dir at %s", d, exc_info=True)
+                continue
+            for s in dir_skills:
+                if s.name in project_skill_names or s.name in extra_skill_names:
+                    continue
+                extra_skill_names.add(s.name)
+                result.append(
+                    {
+                        "name": s.name,
+                        "description": s.description,
+                        "path": _resolve_skill_path(s.name, [str(resolved)]),
+                        "source": str(s.source) if s.source else None,
+                        "metadata": s.metadata,
+                        "enabled": s.name not in loader.disabled_skills,
+                        "scope": "extra",
+                        "dir": str(resolved),
+                    }
+                )
+
     # Always use list_global_skills() so runtime project overlay never pollutes the global scope
     global_dirs = loader.global_skill_dirs
     result.extend(
@@ -91,7 +130,7 @@ def list_skills(
             "scope": "global",
         }
         for s in loader.list_global_skills()
-        if s.name not in project_skill_names
+        if s.name not in project_skill_names and s.name not in extra_skill_names
     )
     return result
 

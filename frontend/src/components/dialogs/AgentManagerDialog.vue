@@ -1,7 +1,8 @@
 <template>
   <el-dialog
     v-model="visible"
-    width="900px"
+    :width="isMobile ? 'calc(100vw - 24px)' : 'min(94vw, 1360px)'"
+    align-center
     class="agent-manager-dialog"
     :close-on-click-modal="false"
     :show-close="false"
@@ -144,23 +145,44 @@
                   <el-input v-model="promptForm.name" placeholder="提示词名称，例如：安全规范、代码风格" />
                 </el-form-item>
                 <el-form-item label="内容">
-                  <el-input
-                    v-model="promptForm.content"
-                    type="textarea"
-                    :autosize="{ minRows: 6, maxRows: 18 }"
-                    placeholder="在此填写提示词内容，将追加注入到绑定该模板的 Agent 系统提示词末尾..."
-                  />
+                  <div class="prompt-content-wrap">
+                    <div class="prompt-content-toolbar">
+                      <el-button
+                        v-if="promptPreviewMode"
+                        text
+                        size="small"
+                        @click="promptPreviewMode = false"
+                      >返回编辑</el-button>
+                      <el-button
+                        v-else
+                        text
+                        size="small"
+                        @click="promptPreviewMode = true"
+                      >渲染预览</el-button>
+                    </div>
+                    <el-input
+                      v-if="!promptPreviewMode"
+                      v-model="promptForm.content"
+                      type="textarea"
+                      :autosize="{ minRows: 8, maxRows: 20 }"
+                      placeholder="在此填写提示词内容，将追加注入到绑定该模板的 Agent 系统提示词末尾..."
+                    />
+                    <div v-else class="prompt-preview markdown-body">
+                      <div v-if="!promptForm.content" class="prompt-preview-empty">暂无内容可预览</div>
+                      <div v-else v-html="renderedPromptContent" />
+                    </div>
+                  </div>
                 </el-form-item>
               </el-form>
             </div>
             <div class="prompts-editor-footer form-footer">
               <div>
-                <el-button v-if="editingPromptId && !isNewPrompt" type="danger" plain @click="handleDeletePrompt">
+                <el-button v-if="editingPromptId && !isNewPrompt" type="danger" @click="handleDeletePrompt">
                   删除
                 </el-button>
               </div>
               <div class="prompts-editor-footer-right">
-                <el-button @click="cancelEditPrompt">取消</el-button>
+                <el-button type="info" @click="cancelEditPrompt">取消</el-button>
                 <el-button type="primary" :loading="promptSaving" @click="handleSavePrompt">
                   {{ isNewPrompt ? '创建' : '保存' }}
                 </el-button>
@@ -410,6 +432,41 @@
                     </div>
                   </el-form-item>
 
+                  <el-form-item label="自定义 Skills 目录">
+                    <div class="extra-dirs-list">
+                      <div
+                        v-for="(dir, idx) in (form.extra_skill_dirs || [])"
+                        :key="idx"
+                        class="extra-dir-row"
+                      >
+                        <el-input
+                          :model-value="dir"
+                          placeholder="如 D:\\codes\\my-skills（必须是绝对路径）"
+                          clearable
+                          @update:model-value="(val: string) => updateExtraSkillDir(idx, val)"
+                          @clear="removeExtraSkillDir(idx)"
+                        />
+                        <el-button
+                          :icon="Delete"
+                          circle
+                          plain
+                          type="danger"
+                          size="small"
+                          class="extra-dir-delete-btn"
+                          @click="removeExtraSkillDir(idx)"
+                        />
+                      </div>
+                      <el-button
+                        :icon="Plus"
+                        plain
+                        size="small"
+                        class="extra-dirs-add-btn"
+                        @click="addExtraSkillDir"
+                      >添加 Skills 目录</el-button>
+                    </div>
+                    <div class="form-hint">为该智能体额外加载指定目录下的 Skills（绝对路径，独立于项目模式）</div>
+                  </el-form-item>
+
                   <el-form-item label="允许的全局 Skills">
                     <div class="tool-group-select">
                       <el-radio-group v-model="globalSkillsMode" size="small">
@@ -419,19 +476,80 @@
                       </el-radio-group>
                       <div v-if="globalSkillsMode === 'custom'" v-loading="dialogSkillsLoading" class="custom-groups">
                         <el-checkbox-group v-model="selectedGlobalSkills">
-                          <el-checkbox
-                            v-for="skill in dialogGlobalSkills"
-                            :key="skill.name"
-                            :value="skill.name"
-                            class="skill-checkbox"
+                          <div
+                            v-for="grp in globalSkillGroups"
+                            :key="grp.key"
+                            class="skill-group"
                           >
-                            <div class="skill-item-main">
-                              <span class="skill-item-name">{{ skill.name }}</span>
-                              <span v-if="skill.path" class="skill-item-path" :title="skill.path">{{ skill.path }}</span>
+                            <div
+                              class="skill-group-header"
+                              :title="grp.path || ''"
+                              @click="toggleSkillGroup(grp.key)"
+                            >
+                              <span class="skill-group-caret" :class="{ 'is-open': isSkillGroupOpen(grp.key) }">▸</span>
+                              <span class="skill-group-icon">📁</span>
+                              <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
+                              <span class="skill-group-count">{{ grp.skills.length }}</span>
                             </div>
-                            <div v-if="skill.description" class="skill-item-desc">{{ skill.description }}</div>
-                          </el-checkbox>
+                            <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
+                              <el-checkbox
+                                v-for="skill in grp.skills"
+                                :key="skill.name"
+                                :value="skill.name"
+                                class="skill-checkbox"
+                              >
+                                <div class="skill-item-main">
+                                  <span class="skill-item-name" :title="skill.name">{{ skill.name }}</span>
+                                </div>
+                                <div v-if="skill.description" class="skill-item-desc" :title="skill.description">{{ skill.description }}</div>
+                              </el-checkbox>
+                            </div>
+                          </div>
                           <div v-if="dialogGlobalSkills.length === 0" class="skill-empty-tip">暂无全局 Skills</div>
+                        </el-checkbox-group>
+                      </div>
+                    </div>
+                  </el-form-item>
+
+                  <el-form-item v-if="dialogExtraSkills.length > 0" label="额外目录 Skills">
+                    <div class="tool-group-select">
+                      <el-radio-group v-model="extraSkillsMode" size="small">
+                        <el-radio-button value="all">全部</el-radio-button>
+                        <el-radio-button value="none">无</el-radio-button>
+                        <el-radio-button value="custom">自定义</el-radio-button>
+                      </el-radio-group>
+                      <div v-if="extraSkillsMode === 'custom'" v-loading="dialogSkillsLoading" class="custom-groups">
+                        <el-checkbox-group v-model="selectedExtraSkills">
+                          <div
+                            v-for="grp in extraSkillGroups"
+                            :key="grp.key"
+                            class="skill-group"
+                          >
+                            <div
+                              class="skill-group-header"
+                              :title="grp.path || ''"
+                              @click="toggleSkillGroup(grp.key)"
+                            >
+                              <span class="skill-group-caret" :class="{ 'is-open': isSkillGroupOpen(grp.key) }">▸</span>
+                              <span class="skill-group-icon">📁</span>
+                              <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
+                              <span class="skill-group-count">{{ grp.skills.length }}</span>
+                            </div>
+                            <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
+                              <el-checkbox
+                                v-for="skill in grp.skills"
+                                :key="skill.name"
+                                :value="skill.name"
+                                class="skill-checkbox"
+                              >
+                                <div class="skill-item-main">
+                                  <span class="skill-item-name" :title="skill.name">{{ skill.name }}</span>
+                                </div>
+                                <div v-if="skill.description" class="skill-item-desc" :title="skill.description">{{ skill.description }}</div>
+                              </el-checkbox>
+                            </div>
+                          </div>
+                          <div v-if="dialogExtraSkills.length === 0" class="skill-empty-tip">暂无额外目录 Skills</div>
                         </el-checkbox-group>
                       </div>
                     </div>
@@ -447,18 +565,35 @@
                       </el-radio-group>
                       <div v-if="projectSkillsMode === 'custom'" v-loading="dialogSkillsLoading" class="custom-groups">
                         <el-checkbox-group v-model="selectedProjectSkills">
-                          <el-checkbox
-                            v-for="skill in dialogProjectSkills"
-                            :key="skill.name"
-                            :value="skill.name"
-                            class="skill-checkbox"
+                          <div
+                            v-for="grp in projectSkillGroups"
+                            :key="grp.key"
+                            class="skill-group"
                           >
-                            <div class="skill-item-main">
-                              <span class="skill-item-name">{{ skill.name }}</span>
-                              <span v-if="skill.path" class="skill-item-path" :title="skill.path">{{ skill.path }}</span>
+                            <div
+                              class="skill-group-header"
+                              :title="grp.path || ''"
+                              @click="toggleSkillGroup(grp.key)"
+                            >
+                              <span class="skill-group-caret" :class="{ 'is-open': isSkillGroupOpen(grp.key) }">▸</span>
+                              <span class="skill-group-icon">📁</span>
+                              <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
+                              <span class="skill-group-count">{{ grp.skills.length }}</span>
                             </div>
-                            <div v-if="skill.description" class="skill-item-desc">{{ skill.description }}</div>
-                          </el-checkbox>
+                            <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
+                              <el-checkbox
+                                v-for="skill in grp.skills"
+                                :key="skill.name"
+                                :value="skill.name"
+                                class="skill-checkbox"
+                              >
+                                <div class="skill-item-main">
+                                  <span class="skill-item-name" :title="skill.name">{{ skill.name }}</span>
+                                </div>
+                                <div v-if="skill.description" class="skill-item-desc" :title="skill.description">{{ skill.description }}</div>
+                              </el-checkbox>
+                            </div>
+                          </div>
                         </el-checkbox-group>
                       </div>
                     </div>
@@ -551,10 +686,10 @@
 
           <!-- Footer actions -->
           <div class="form-footer">
-            <el-button @click="visible = false">关闭</el-button>
+            <el-button type="info" @click="visible = false">关闭</el-button>
             <div class="form-footer-right">
-              <el-button v-if="!isReadOnly && canCopy" plain @click="handleCopy">复制</el-button>
-              <el-button v-if="!isReadOnly && canDelete" type="danger" plain @click="handleDelete">删除</el-button>
+              <el-button v-if="!isReadOnly && canCopy" type="success" @click="handleCopy">克隆</el-button>
+              <el-button v-if="!isReadOnly && canDelete" type="danger" @click="handleDelete">删除</el-button>
               <el-button v-if="!isReadOnly && !isCodeAgent" type="primary" :loading="saving" @click="handleSave">
                 {{ isPendingNew ? '创建' : '保存' }}
               </el-button>
@@ -612,12 +747,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { InputInstance } from 'element-plus'
 import { QuestionFilled, Folder, Plus, Delete } from '@element-plus/icons-vue'
 import { useMediaQuery } from '@vueuse/core'
 import { fetchAvailableSubagents, api } from '@/api/http'
+import { renderMarkdown } from '@/utils/markdown'
 import { useToolsStore } from '@/stores/tools'
 import { useAgentsStore, type AgentPreset, type AgentSubagentConfig } from '@/stores/agents'
 import { usePromptsStore } from '@/stores/prompts'
@@ -655,6 +791,8 @@ const editingPromptId = ref<string | null>(null)
 const isNewPrompt = ref(false)
 const promptSaving = ref(false)
 const promptForm = ref({ name: '', content: '' })
+const promptPreviewMode = ref(false)
+const renderedPromptContent = computed(() => renderMarkdown(promptForm.value.content))
 
 function switchToPromptsView() {
   if (viewMode.value === 'prompts') return  // already active, don't reset
@@ -836,6 +974,8 @@ const globalSkillsMode = ref<'all' | 'none' | 'custom'>('none')
 const selectedGlobalSkills = ref<string[]>([])
 const projectSkillsMode = ref<'all' | 'none' | 'custom'>('all')
 const selectedProjectSkills = ref<string[]>([])
+const extraSkillsMode = ref<'all' | 'none' | 'custom'>('all')
+const selectedExtraSkills = ref<string[]>([])
 const availableSubagents = ref<Array<{
   id: string
   name: string
@@ -845,11 +985,60 @@ const availableSubagents = ref<Array<{
 }>>([])
 
 // Skills lists
-type DialogSkill = { name: string; description: string; path: string | null; scope: 'global' | 'project'; enabled: boolean }
+type DialogSkill = { name: string; description: string; path: string | null; scope: 'global' | 'project' | 'extra'; enabled: boolean }
+type SkillGroup = { key: string; folder: string; path: string | null; skills: DialogSkill[] }
 const dialogAllSkills = ref<DialogSkill[]>([])
 const dialogSkillsLoading = ref(false)
 const dialogGlobalSkills = computed(() => dialogAllSkills.value.filter(s => s.scope === 'global'))
 const dialogProjectSkills = computed(() => dialogAllSkills.value.filter(s => s.scope === 'project'))
+const dialogExtraSkills = computed(() => dialogAllSkills.value.filter(s => s.scope === 'extra'))
+
+// Tree grouping: group skills by their containing collection folder, derived from the
+// skill path `<collection>/<skillFolder>/SKILL.md` by dropping the filename and skill folder.
+function groupSkillsByFolder(skills: DialogSkill[]): SkillGroup[] {
+  const groups = new Map<string, SkillGroup>()
+  for (const s of skills) {
+    let key: string
+    let folder: string
+    let path: string | null
+    if (s.path) {
+      const parts = s.path.split(/[\\/]+/).filter(Boolean)
+      // remove filename (SKILL.md)
+      parts.pop()
+      // remove the skill folder name (skill lives one level under its collection)
+      parts.pop()
+      path = parts.join('\\')
+      key = path || '__root__'
+      // Full collection path instead of the last folder segment
+      folder = path || '其他'
+    } else {
+      key = '__root__'
+      path = null
+      folder = '其他'
+    }
+    if (!groups.has(key)) {
+      groups.set(key, { key, folder, path, skills: [] })
+    }
+    groups.get(key)!.skills.push(s)
+  }
+  const list = [...groups.values()]
+  list.sort((a, b) => a.folder.localeCompare(b.folder, 'zh-Hans-CN'))
+  list.forEach(g => g.skills.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN')))
+  return list
+}
+
+const globalSkillGroups = computed(() => groupSkillsByFolder(dialogGlobalSkills.value))
+const projectSkillGroups = computed(() => groupSkillsByFolder(dialogProjectSkills.value))
+const extraSkillGroups = computed(() => groupSkillsByFolder(dialogExtraSkills.value))
+
+// Expanded state: groups default to expanded (undefined === expanded).
+const expandedSkillGroups = reactive<Record<string, boolean>>({})
+function toggleSkillGroup(key: string) {
+  expandedSkillGroups[key] = expandedSkillGroups[key] !== false
+}
+function isSkillGroupOpen(key: string): boolean {
+  return expandedSkillGroups[key] !== false
+}
 
 let _skillFetchSeq = 0
 
@@ -860,13 +1049,16 @@ async function fetchDialogSkills() {
     const projectRoot = (form.value.project_mode && form.value.project_root.trim())
       ? form.value.project_root.trim()
       : undefined
-    const result = await api.getSkills(projectRoot)
+    const extraDirs = (form.value.extra_skill_dirs || []).map(d => d.trim()).filter(Boolean)
+    const result = await api.getSkills(projectRoot, extraDirs)
     if (seq !== _skillFetchSeq) return
     dialogAllSkills.value = result
     const globalNames = new Set(result.filter((s: any) => s.scope === 'global').map((s: any) => s.name))
     const projectNames = new Set(result.filter((s: any) => s.scope === 'project').map((s: any) => s.name))
+    const extraNames = new Set(result.filter((s: any) => s.scope === 'extra').map((s: any) => s.name))
     selectedGlobalSkills.value = selectedGlobalSkills.value.filter(n => globalNames.has(n))
     selectedProjectSkills.value = selectedProjectSkills.value.filter(n => projectNames.has(n))
+    selectedExtraSkills.value = selectedExtraSkills.value.filter(n => extraNames.has(n))
   } catch (e) {
     if (seq !== _skillFetchSeq) return
     console.error('[AgentManagerDialog] Failed to fetch skills:', e)
@@ -888,7 +1080,23 @@ const form = ref({
   project_mode: false,
   project_root: '',
   project_extra_dirs: null as string[] | null,
+  extra_skill_dirs: null as string[] | null,
 })
+
+function addExtraSkillDir() {
+  form.value.extra_skill_dirs = [...(form.value.extra_skill_dirs || []), '']
+}
+
+function updateExtraSkillDir(idx: number, value: string) {
+  if (!form.value.extra_skill_dirs) return
+  form.value.extra_skill_dirs[idx] = value
+}
+
+function removeExtraSkillDir(idx: number) {
+  if (!form.value.extra_skill_dirs) return
+  const next = form.value.extra_skill_dirs.filter((_, i) => i !== idx)
+  form.value.extra_skill_dirs = next.length > 0 ? next : null
+}
 
 function addExtraDir() {
   form.value.project_extra_dirs = [...(form.value.project_extra_dirs || []), '']
@@ -911,12 +1119,12 @@ watch(form, () => {
   isDirty.value = true
 }, { deep: true })
 
-watch([toolGroupMode, mcpMode, globalSkillsMode, projectSkillsMode], () => {
+watch([toolGroupMode, mcpMode, globalSkillsMode, projectSkillsMode, extraSkillsMode], () => {
   if (formLoading.value) return
   isDirty.value = true
 })
 
-watch([selectedGroups, selectedMcpServers, selectedGlobalSkills, selectedProjectSkills], () => {
+watch([selectedGroups, selectedMcpServers, selectedGlobalSkills, selectedProjectSkills, selectedExtraSkills], () => {
   if (formLoading.value) return
   isDirty.value = true
 }, { deep: true })
@@ -933,6 +1141,18 @@ watch([() => form.value.project_root, () => form.value.project_mode], () => {
     if (visible.value) fetchDialogSkills()
   }, 400)
 })
+
+// Re-fetch skills when extra skill dirs change
+watch(() => form.value.extra_skill_dirs, () => {
+  if (!visible.value || formLoading.value) return
+  extraSkillsMode.value = 'all'
+  selectedExtraSkills.value = []
+  if (_skillFetchTimer) clearTimeout(_skillFetchTimer)
+  _skillFetchTimer = setTimeout(() => {
+    _skillFetchTimer = null
+    if (visible.value) fetchDialogSkills()
+  }, 600)
+}, { deep: true })
 
 // Clean up pending timer when dialog closes
 watch(visible, (v) => {
@@ -956,16 +1176,20 @@ function getAgentIcon(agent: AgentPreset): string {
 function _distributeAllowedSkills(allowedSkills: string[] | null) {
   const globalNames = new Set(dialogGlobalSkills.value.map(s => s.name))
   const projectNames = new Set(dialogProjectSkills.value.map(s => s.name))
+  const extraNames = new Set(dialogExtraSkills.value.map(s => s.name))
   const hasProject = projectNames.size > 0
+  const hasExtra = extraNames.size > 0
 
   if (allowedSkills === null) {
     globalSkillsMode.value = 'all'; selectedGlobalSkills.value = []
     projectSkillsMode.value = 'all'; selectedProjectSkills.value = []
+    extraSkillsMode.value = 'all'; selectedExtraSkills.value = []
     return
   }
   if (allowedSkills.length === 0) {
     globalSkillsMode.value = 'none'; selectedGlobalSkills.value = []
     projectSkillsMode.value = 'none'; selectedProjectSkills.value = []
+    extraSkillsMode.value = 'none'; selectedExtraSkills.value = []
     return
   }
   const allowedSet = new Set(allowedSkills)
@@ -978,22 +1202,37 @@ function _distributeAllowedSkills(allowedSkills: string[] | null) {
     globalSkillsMode.value = 'custom'; selectedGlobalSkills.value = allowedGlobal
   }
   if (!hasProject) {
-    projectSkillsMode.value = 'all'; selectedProjectSkills.value = []; return
-  }
-  const allowedProject = [...projectNames].filter(n => allowedSet.has(n))
-  if (allowedProject.length === 0) {
-    projectSkillsMode.value = 'none'; selectedProjectSkills.value = []
-  } else if (allowedProject.length === projectNames.size) {
     projectSkillsMode.value = 'all'; selectedProjectSkills.value = []
   } else {
-    projectSkillsMode.value = 'custom'; selectedProjectSkills.value = allowedProject
+    const allowedProject = [...projectNames].filter(n => allowedSet.has(n))
+    if (allowedProject.length === 0) {
+      projectSkillsMode.value = 'none'; selectedProjectSkills.value = []
+    } else if (allowedProject.length === projectNames.size) {
+      projectSkillsMode.value = 'all'; selectedProjectSkills.value = []
+    } else {
+      projectSkillsMode.value = 'custom'; selectedProjectSkills.value = allowedProject
+    }
+  }
+  if (!hasExtra) {
+    extraSkillsMode.value = 'all'; selectedExtraSkills.value = []
+  } else {
+    const allowedExtra = [...extraNames].filter(n => allowedSet.has(n))
+    if (allowedExtra.length === 0) {
+      extraSkillsMode.value = 'none'; selectedExtraSkills.value = []
+    } else if (allowedExtra.length === extraNames.size) {
+      extraSkillsMode.value = 'all'; selectedExtraSkills.value = []
+    } else {
+      extraSkillsMode.value = 'custom'; selectedExtraSkills.value = allowedExtra
+    }
   }
 }
 
 function _computeAllowedSkills(): string[] | null {
   const hasProject = dialogProjectSkills.value.length > 0
+  const hasExtra = dialogExtraSkills.value.length > 0
   const effectiveProjectMode = hasProject ? projectSkillsMode.value : 'all'
-  if (globalSkillsMode.value === 'all' && effectiveProjectMode === 'all') return null
+  const effectiveExtraMode = hasExtra ? extraSkillsMode.value : 'all'
+  if (globalSkillsMode.value === 'all' && effectiveProjectMode === 'all' && effectiveExtraMode === 'all') return null
   const globalAllowed =
     globalSkillsMode.value === 'all' ? dialogGlobalSkills.value.map(s => s.name) :
     globalSkillsMode.value === 'none' ? [] :
@@ -1002,7 +1241,11 @@ function _computeAllowedSkills(): string[] | null {
     projectSkillsMode.value === 'all' ? dialogProjectSkills.value.map(s => s.name) :
     projectSkillsMode.value === 'none' ? [] :
     selectedProjectSkills.value
-  return [...globalAllowed, ...projectAllowed]
+  const extraAllowed = !hasExtra ? [] :
+    extraSkillsMode.value === 'all' ? dialogExtraSkills.value.map(s => s.name) :
+    extraSkillsMode.value === 'none' ? [] :
+    selectedExtraSkills.value
+  return [...globalAllowed, ...projectAllowed, ...extraAllowed]
 }
 
 function _applyAgentToToolsMode(agent: AgentPreset) {
@@ -1041,6 +1284,7 @@ async function _populateFormFromAgent(
   form.value.project_mode = agent.project_mode ?? false
   form.value.project_root = agent.project_root ?? ''
   form.value.project_extra_dirs = agent.project_extra_dirs ? [...agent.project_extra_dirs] : null
+  form.value.extra_skill_dirs = agent.extra_skill_dirs ? [...agent.extra_skill_dirs] : null
   _applyAgentToToolsMode(agent)
 
   const [allSubagents] = await Promise.all([
@@ -1096,11 +1340,13 @@ async function _loadNewForm() {
     project_mode: false,
     project_root: '',
     project_extra_dirs: null,
+    extra_skill_dirs: null,
   }
   toolGroupMode.value = 'none'; selectedGroups.value = []
   mcpMode.value = 'none'; selectedMcpServers.value = []
   globalSkillsMode.value = 'none'; selectedGlobalSkills.value = []
   projectSkillsMode.value = 'none'; selectedProjectSkills.value = []
+  extraSkillsMode.value = 'all'; selectedExtraSkills.value = []
   boundPromptIds.value = []
 
   const [allSubagents] = await Promise.all([
@@ -1284,6 +1530,29 @@ async function handleSave() {
       }
     }
 
+    // Validate extra skill dirs: must be absolute paths that exist
+    const cleanedSkillDirs = (form.value.extra_skill_dirs || []).map(d => d.trim()).filter(Boolean)
+    if (cleanedSkillDirs.length > 0) {
+      const isAbsolute = (p: string) => /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('\\\\') || p.startsWith('~')
+      const notAbsolute = cleanedSkillDirs.filter(d => !isAbsolute(d))
+      if (notAbsolute.length > 0) {
+        activeTab.value = 'basic'
+        ElMessage.error(`自定义 Skills 目录必须使用绝对路径：${notAbsolute.join('、')}`)
+        return
+      }
+      try {
+        const results = await api.checkPaths(cleanedSkillDirs)
+        const missingPaths = results.filter(r => !r.exists).map(r => r.path)
+        if (missingPaths.length > 0) {
+          activeTab.value = 'basic'
+          ElMessage.error(`以下 Skills 目录不存在或不是目录，请检查后重新填写：${missingPaths.join('、')}`)
+          return
+        }
+      } catch {
+        // 路径检查接口失败时不阻断保存，由后端兜底校验
+      }
+    }
+
     if (form.value.project_mode) {
       const FILE_TOOL_GROUPS = ['file_read', 'file_write', 'command']
       if (toolGroupMode.value === 'none') {
@@ -1331,6 +1600,10 @@ async function handleSave() {
             return dirs.length > 0 ? dirs : null
           })()
         : null,
+      extra_skill_dirs: (() => {
+        const dirs = (form.value.extra_skill_dirs || []).map(d => d.trim()).filter(Boolean)
+        return dirs.length > 0 ? dirs : null
+      })(),
     }
 
     try {
@@ -1439,7 +1712,7 @@ defineExpose({ open })
 .agent-manager-dialog :deep(.el-dialog__body) {
   padding: 0;
   overflow: hidden;
-  height: min(76vh, 660px);
+  height: min(86vh, 980px);
 }
 
 .agent-manager-dialog :deep(.el-dialog__header) {
@@ -1859,8 +2132,6 @@ defineExpose({ open })
   background: var(--el-fill-color-light);
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
-  max-height: 500px;
-  overflow-y: auto;
 }
 
 .custom-groups .el-checkbox {
@@ -1873,6 +2144,155 @@ defineExpose({ open })
   margin-top: 2px;
 }
 
+/* ===== Skill checkbox: 限宽 + 省略号 ===== */
+/* 关键：el-checkbox-group 默认 font-size:0/line-height:0，
+   加上 .el-checkbox 无宽度约束，会让描述文字无限撑宽冲出 custom-groups 边界。
+   给 checkbox 与内部 label 限宽，让 overflow/ellipsis 能触发。 */
+.skill-checkbox {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.skill-checkbox :deep(.el-checkbox__label) {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  padding-left: 8px;
+}
+
+.skill-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0; /* flex 子项：允许缩小，让 ellipsis 生效 */
+}
+
+.skill-item-name {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  /* 单行省略 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  color: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  font-weight: 600 !important;
+}
+
+.skill-item-desc {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  color: var(--el-text-color-regular);
+  opacity: 0.75;
+  margin-top: 2px;
+  margin-left: 22px; /* 与 checkbox 框后的文字左侧对齐，避开选中框宽度 */
+  /* 单行省略：用户明确要求 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.skill-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  /* 关键：覆盖上层 <el-checkbox-group> 默认的 font-size:0 / line-height:0，否则文字塌缩为 0 高度看不见 */
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  font-weight: 600 !important;
+  /* 轻量版：去掉整块重色长条，改为左侧一个细主题色竖条做标识，背景极淡 */
+  color: var(--el-text-color-primary) !important;
+  background: color-mix(in srgb, var(--el-color-primary) 5%, transparent);
+  border: 1px solid transparent;
+  border-left: 3px solid var(--el-color-primary);
+  transition: background 0.15s ease;
+}
+
+.skill-group-header:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
+}
+
+/* 暗色：保持左侧竖条，不用深蓝长块背景 */
+:global(html.dark) .skill-group-header {
+  color: #e6f0ff !important;
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent) !important;
+  border-color: transparent !important;
+  border-left: 3px solid #7aa8ff !important;
+}
+
+:global(html.dark) .skill-group-header:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 20%, transparent) !important;
+}
+
+.skill-group-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  transition: transform 0.15s ease;
+}
+
+.skill-group-caret.is-open {
+  transform: rotate(90deg);
+}
+
+.skill-group-icon {
+  flex-shrink: 0;
+  font-size: 14px !important;
+  line-height: 1 !important;
+  color: inherit !important;
+}
+
+/* 暗色下数量徽标要更对比：改用白底蓝字 */
+:global(html.dark) .skill-group-count {
+  color: #1e3a5f;
+  background: #ffffff;
+}
+
+.skill-group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  font-weight: inherit !important;
+  /* 允许 flex 放大并缩窄，让单行省略号生效，不顶走数量徽标 */
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.skill-group-count {
+  flex-shrink: 0;
+  font-size: 11px !important;
+  line-height: 16px !important;
+  font-weight: 600 !important;
+  color: var(--el-color-white);
+  background: var(--el-color-primary);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+
+.skill-group-body {
+  padding: 8px 6px 6px 24px;
+  border-left: 1px solid var(--el-border-color-lighter);
+  margin: 0 0 4px 9px;
+}
+
 .skill-item-main {
   display: flex;
   align-items: center;
@@ -1883,16 +2303,6 @@ defineExpose({ open })
 .skill-item-name {
   font-weight: 600;
   color: var(--el-text-color-primary);
-}
-
-.skill-item-path {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  opacity: 0.85;
-  max-width: 380px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .skill-item-desc {
@@ -2121,6 +2531,36 @@ defineExpose({ open })
   gap: 8px;
 }
 
+/* ===== Prompt content preview ===== */
+.prompt-content-wrap {
+  width: 100%;
+}
+
+.prompt-content-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.prompt-preview {
+  min-height: 120px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-bg-color);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.prompt-preview-empty {
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
 
 /* ===== Bound prompts tab ===== */
 .bound-prompts-section {
@@ -2225,11 +2665,6 @@ defineExpose({ open })
     justify-content: flex-end;
   }
 
-  /* 工具组/MCP/Skills 自定义勾选区：缩小最大高度，避免框内再滚动体验差 */
-  .custom-groups {
-    max-height: 180px;
-  }
-
   /* dialog header 水平内边距收窄 */
   .agent-manager-dialog :deep(.el-dialog__header) {
     padding: 14px 14px 12px;
@@ -2245,10 +2680,17 @@ defineExpose({ open })
 
 <style>
 /* Global overrides for this dialog (non-scoped) */
+.agent-manager-dialog {
+  border: 2px solid color-mix(in srgb, var(--el-color-primary) 38%, var(--el-border-color-lighter));
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 12px 32px -8px color-mix(in srgb, var(--el-color-primary) 26%, transparent);
+}
+
 .agent-manager-dialog .el-dialog__body {
   padding: 0;
   overflow: hidden;
-  height: min(76vh, 660px);
+  height: min(86vh, 980px);
 }
 
 .agent-manager-dialog .el-dialog__header {
@@ -2348,5 +2790,29 @@ defineExpose({ open })
   .agent-manager-dialog .el-form-item {
     padding: 10px 10px;
   }
+}
+
+/* ===== Dark mode: Skill folder header (全局硬写，避免 scoped/:global 编译后选择器错位) ===== */
+html.dark .agent-manager-dialog .skill-group-header {
+  color: #e6f0ff !important;
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent) !important;
+  border-color: transparent !important;
+  border-left: 3px solid #7aa8ff !important;
+}
+
+html.dark .agent-manager-dialog .skill-group-header:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 20%, transparent) !important;
+}
+
+html.dark .agent-manager-dialog .skill-group-caret,
+html.dark .agent-manager-dialog .skill-group-icon,
+html.dark .agent-manager-dialog .skill-group-name {
+  color: #e6f0ff !important;
+}
+
+html.dark .agent-manager-dialog .skill-group-count {
+  color: #1e3a5f !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
 }
 </style>
