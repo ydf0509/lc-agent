@@ -190,6 +190,9 @@ class AgentEngine:
                 logger.warning("Subagent preset not found: %s — skipping", subagent_id)
                 continue
             subagent_preset = self._resolve_preset(subagent_id)
+            if not getattr(subagent_preset, "can_be_subagent", False):
+                logger.warning("Subagent not eligible (can_be_subagent off): %s — skipping", subagent_id)
+                continue
             display_name = subagent_preset.display_name or subagent_preset.name
             subagent_type = subagent_preset.name
             suffix = 1

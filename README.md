@@ -441,6 +441,10 @@ launch_desktop(host='127.0.0.1', port=8001, title="心有灵犀") # host port ti
 
 默认用 `curl_cffi` 模拟 Chrome 指纹绕反爬，稳定性远超requests。和上面的 MCP 路线相比，它胜在**零部署、零花费**，适合不想折腾 MCP 服务、又想立刻让 Agent 联网的场景；缺点是依赖百度接口，搜索稳定性那肯定不如 anysearch大公司做的商业产品，anysearch的稳定性几乎100%了， baidu-search 的稳定性95%左右。
 
+### lc-agent 支持什么数据库？
+答：lc-agent分为langchain的checkpoint数据库和业务数据库。
+checkpoint数据库支持sqlite postgre
+业务数据库使用的sqlmodel，所以支持所有sqlachemy支持的数据库
 
 ### lc-agent 能不能作为aicoding 工具来使用？
 

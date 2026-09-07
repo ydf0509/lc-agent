@@ -19,6 +19,7 @@ from lc_agent.config import (
 )
 from lc_agent.config.schema import MemoryConfig
 from lc_agent.core.auth import AuthService
+from lc_agent.core.checkpointer import build_checkpointer, is_postgres_url
 from lc_agent.core.engine import AgentEngine
 from lc_agent.core.memory import aclose_memory_store, create_sqlite_memory_store
 from lc_agent.core.permissions import PermissionsService
@@ -80,6 +81,14 @@ class LcAgentApp:
         self.port = port
         self._db_url = database_config["url"]
         self._checkpoint_path = database_config["checkpoint_path"]
+        # A PostgreSQL URL wins over checkpoint_path; both are kept so existing
+        # SQLite configs keep working without edits. A relative SQLite path in
+        # checkpoint_url is resolved like checkpoint_path, not against the CWD.
+        checkpoint_url_raw = database_config.get("checkpoint_url", "").strip()
+        if checkpoint_url_raw and not is_postgres_url(checkpoint_url_raw):
+            checkpoint_url_raw = _resolve_file_path(checkpoint_url_raw, project_root)
+        self._checkpoint_url = checkpoint_url_raw or self._checkpoint_path
+        self._checkpointer_bundle = None
         permissions_path = get_config_value(config, "permissions.path", "./permissions.jsonc")
         self._permissions_service = PermissionsService(permissions_path=Path(permissions_path))
         self.engine = AgentEngine(config)
@@ -132,12 +141,8 @@ class LcAgentApp:
             await init_db(self._db_url)
             await self._init_auth(app)
             try:
-                from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-                import aiosqlite
-                conn = await aiosqlite.connect(self._checkpoint_path)
-                saver = AsyncSqliteSaver(conn)
-                await saver.setup()
-                self.engine._checkpointer = saver
+                self._checkpointer_bundle = await build_checkpointer(self._checkpoint_url)
+                self.engine._checkpointer = self._checkpointer_bundle.saver
             except Exception:
                 app_logger.exception("Checkpoint saver setup failed, using None")
 
@@ -171,6 +176,10 @@ class LcAgentApp:
             yield
         finally:
             await self.automation_scheduler.stop()
+            if self._checkpointer_bundle is not None:
+                await self._checkpointer_bundle.aclose()
+                self._checkpointer_bundle = None
+                self.engine._checkpointer = None
             if memory_store is not None:
                 await aclose_memory_store(memory_store)
                 self.engine._store = None
@@ -235,8 +244,11 @@ class LcAgentApp:
                 preset = AgentPreset(
                     id=row.id,
                     name=row.name,
+                    display_name=row.display_name,
                     system_prompt=row.system_prompt,
                     default_model=row.default_model,
+                    default_delegation_description=row.default_delegation_description or "",
+                    can_be_subagent=row.can_be_subagent,
                     allowed_tool_groups=row.allowed_tool_groups,
                     allowed_mcp_servers=row.allowed_mcp_servers,
                     allowed_skills=row.allowed_skills,
@@ -297,6 +309,7 @@ class LcAgentApp:
             system_prompt=description or f"Custom agent: {name}",
             default_model="custom",
             default_delegation_description=delegation_description,
+            can_be_subagent=bool(delegation_description.strip()),
             allowed_tool_groups=[],
             allowed_mcp_servers=[],
             allowed_skills=[],

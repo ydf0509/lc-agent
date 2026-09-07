@@ -13,6 +13,8 @@ export interface AgentPreset {
   display_name: string | null
   system_prompt: string
   default_model: string
+  default_delegation_description?: string | null
+  can_be_subagent?: boolean
   allowed_tool_groups: string[] | null
   allowed_mcp_servers: string[] | null
   allowed_skills: string[] | null

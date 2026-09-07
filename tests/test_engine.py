@@ -79,6 +79,8 @@ class TestAgentEngine:
     def test_build_agent_configures_todo_middleware_final_answer_guard(self, sample_config, monkeypatch):
         from lc_agent.core.engine import AgentEngine
 
+        from langchain.agents.middleware import TodoListMiddleware
+
         captured = {}
         engine = AgentEngine(sample_config)
 
@@ -93,7 +95,13 @@ class TestAgentEngine:
 
         engine.build_agent()
 
-        todo_middleware = captured["middleware"][0]
+        # Look it up by type: PatchToolCallsMiddleware is registered first, so
+        # indexing by position breaks every time the middleware order changes.
+        todo_middleware = next(
+            (mw for mw in captured["middleware"] if isinstance(mw, TodoListMiddleware)),
+            None,
+        )
+        assert todo_middleware is not None, "TodoListMiddleware was not registered"
         assert "After you start writing the substantive final answer" in todo_middleware.system_prompt
         assert "do not call `write_todos` again" in todo_middleware.system_prompt
         assert "Do not create todo items whose only purpose" in todo_middleware.tool_description

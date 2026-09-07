@@ -36,6 +36,7 @@ class AgentPreset(BaseModel):
     system_prompt: str
     default_model: str
     default_delegation_description: str = ""
+    can_be_subagent: bool = False
 
     allowed_tool_groups: list[str] | None = None
     allowed_mcp_servers: list[str] | None = None

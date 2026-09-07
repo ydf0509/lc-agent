@@ -36,10 +36,18 @@ def get_async_session(url: str = "sqlite+aiosqlite:///./lc_agent_data.db") -> As
     return _async_session_factory()
 
 
+_ASYNC_TO_SYNC_SCHEME = {
+    "sqlite+aiosqlite": "sqlite",
+    "postgresql+asyncpg": "postgresql+psycopg2",
+    "mysql+aiomysql": "mysql+pymysql",
+}
+
+
 def _to_sync_url(url: str) -> str:
     """Convert async DB URL to sync for Alembic."""
-    if "+aiosqlite" in url:
-        return url.replace("+aiosqlite", "")
+    for async_scheme, sync_scheme in _ASYNC_TO_SYNC_SCHEME.items():
+        if url.startswith(async_scheme + "://"):
+            return sync_scheme + url[len(async_scheme):]
     return url
 
 

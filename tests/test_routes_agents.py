@@ -57,6 +57,8 @@ async def test_authorized_user_can_list_available_subagents(app_and_headers, set
             "name": "shared-agent",
             "system_prompt": "Shared agent",
             "default_model": "gpt-4",
+            "default_delegation_description": "可处理共享委派任务",
+            "can_be_subagent": True,
         }, headers=admin_headers)
         assert create_resp.status_code == 201
         agent_id = create_resp.json()["id"]
@@ -363,13 +365,23 @@ async def test_create_agent_accepts_subagents_payload(app_and_headers):
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        sub_resp = await client.post("/api/agents", json={
+            "name": "payload-subagent",
+            "system_prompt": "Handle delegated work.",
+            "default_model": "gpt-4",
+            "default_delegation_description": "可处理委派的研究与分析任务",
+            "can_be_subagent": True,
+        }, headers=headers)
+        assert sub_resp.status_code == 201
+        sub_id = sub_resp.json()["id"]
+
         payload = {
             "name": "delegating-agent",
             "system_prompt": "Delegate when useful.",
             "default_model": "gpt-4",
             "subagents": [
                 {
-                    "agent_id": "power",
+                    "agent_id": sub_id,
                     "delegation_description": "当你需要查询 funboost 知识时调用它",
                 }
             ],
@@ -379,35 +391,114 @@ async def test_create_agent_accepts_subagents_payload(app_and_headers):
         assert create_resp.status_code == 201
         created = create_resp.json()
         assert "subagent_ids" not in created
-        assert created["subagents"][0]["agent_id"] == "power"
+        assert created["subagents"][0]["agent_id"] == sub_id
         assert created["subagents"][0]["delegation_description"] == "当你需要查询 funboost 知识时调用它"
 
         list_resp = await client.get("/api/agents", headers=headers)
         assert list_resp.status_code == 200
         listed = next(a for a in list_resp.json() if a["id"] == created["id"])
         assert "subagent_ids" not in listed
-        assert listed["subagents"][0]["agent_id"] == "power"
+        assert listed["subagents"][0]["agent_id"] == sub_id
 
 
 @pytest.mark.asyncio
-async def test_create_agent_rejects_blank_subagent_delegation_description(app_and_headers):
+async def test_create_agent_rejects_can_be_subagent_without_default_description(app_and_headers):
+    """can_be_subagent=True requires the agent's own default delegation description."""
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/agents", json={
+            "name": "blank-description-subagent",
+            "system_prompt": "Handle delegated work.",
+            "default_model": "gpt-4",
+            "can_be_subagent": True,
+        }, headers=headers)
+
+        assert create_resp.status_code == 422
+        assert "触发描述" in create_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_agent_allows_blank_override_when_subagent_has_default(app_and_headers):
+    """Blank override is fine when the subagent itself defines a default delegation description."""
+    app, headers = app_and_headers
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        sub_resp = await client.post("/api/agents", json={
+            "name": "researcher",
+            "system_prompt": "Research things.",
+            "default_model": "gpt-4",
+            "default_delegation_description": "当需要调研资料时调用它",
+            "can_be_subagent": True,
+        }, headers=headers)
+        assert sub_resp.status_code == 201
+        sub_id = sub_resp.json()["id"]
+
         payload = {
             "name": "delegating-agent",
             "system_prompt": "Delegate when useful.",
             "default_model": "gpt-4",
             "subagents": [
                 {
-                    "agent_id": "power",
-                    "delegation_description": "   ",
+                    "agent_id": sub_id,
+                    "delegation_description": "",
                 }
             ],
         }
         create_resp = await client.post("/api/agents", json=payload, headers=headers)
 
-    assert create_resp.status_code == 422
+        assert create_resp.status_code == 201
+        assert create_resp.json()["subagents"][0]["delegation_description"] == ""
+
+
+@pytest.mark.asyncio
+async def test_create_agent_persists_default_delegation_description(app_and_headers):
+    app, headers = app_and_headers
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/agents", json={
+            "name": "researcher",
+            "system_prompt": "Research things.",
+            "default_model": "gpt-4",
+            "default_delegation_description": "当需要调研资料时调用它",
+            "can_be_subagent": True,
+        }, headers=headers)
+        assert create_resp.status_code == 201
+        assert create_resp.json()["default_delegation_description"] == "当需要调研资料时调用它"
+
+        list_resp = await client.get("/api/agents", headers=headers)
+        listed = next(a for a in list_resp.json() if a["id"] == create_resp.json()["id"])
+        assert listed["default_delegation_description"] == "当需要调研资料时调用它"
+
+        available_resp = await client.get("/api/agents/available-subagents", headers=headers)
+        available = next(a for a in available_resp.json() if a["id"] == create_resp.json()["id"])
+        assert available["description"] == "当需要调研资料时调用它"
+
+
+@pytest.mark.asyncio
+async def test_update_agent_changes_default_delegation_description(app_and_headers):
+    app, headers = app_and_headers
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post("/api/agents", json={
+            "name": "researcher",
+            "system_prompt": "Research things.",
+            "default_model": "gpt-4",
+            "default_delegation_description": "可处理委派任务",
+            "can_be_subagent": True,
+        }, headers=headers)
+        agent_id = create_resp.json()["id"]
+
+        update_resp = await client.put(f"/api/agents/{agent_id}", json={
+            "default_delegation_description": "当需要深入研究时调用它",
+        }, headers=headers)
+        assert update_resp.status_code == 200
+        assert update_resp.json()["default_delegation_description"] == "当需要深入研究时调用它"
+        assert update_resp.json()["can_be_subagent"] is True
+
+        available_resp = await client.get("/api/agents/available-subagents", headers=headers)
+        available = next(a for a in available_resp.json() if a["id"] == agent_id)
+        assert available["description"] == "当需要深入研究时调用它"
 
 
 @pytest.mark.asyncio
@@ -440,13 +531,23 @@ async def test_update_agent_replaces_subagents_payload(app_and_headers):
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        subagent_resp = await client.post("/api/agents", json={
+            "name": "custom-subagent",
+            "system_prompt": "Handle delegated work.",
+            "default_model": "gpt-4",
+            "default_delegation_description": "可处理委派任务",
+            "can_be_subagent": True,
+        }, headers=headers)
+        assert subagent_resp.status_code == 201
+        subagent_id = subagent_resp.json()["id"]
+
         create_resp = await client.post("/api/agents", json={
             "name": "delegating-agent",
             "system_prompt": "Original",
             "default_model": "gpt-4",
             "subagents": [
                 {
-                    "agent_id": "power",
+                    "agent_id": subagent_id,
                     "delegation_description": "旧描述",
                 }
             ],
@@ -456,7 +557,7 @@ async def test_update_agent_replaces_subagents_payload(app_and_headers):
         update_resp = await client.put(f"/api/agents/{agent_id}", json={
             "subagents": [
                 {
-                    "agent_id": "empty",
+                    "agent_id": subagent_id,
                     "delegation_description": "新描述",
                 }
             ],
@@ -467,7 +568,7 @@ async def test_update_agent_replaces_subagents_payload(app_and_headers):
         assert "subagent_ids" not in updated
         assert updated["subagents"] == [
             {
-                "agent_id": "empty",
+                "agent_id": subagent_id,
                 "delegation_description": "新描述",
             }
         ]
@@ -478,6 +579,18 @@ async def test_update_agent_serializes_subagents_for_db_json_column(app_and_head
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        subagent_ids = []
+        for name in ("serializable-subagent-one", "serializable-subagent-two"):
+            subagent_resp = await client.post("/api/agents", json={
+                "name": name,
+                "system_prompt": "Handle delegated work.",
+                "default_model": "gpt-4",
+                "default_delegation_description": "可处理委派任务",
+                "can_be_subagent": True,
+            }, headers=headers)
+            assert subagent_resp.status_code == 201
+            subagent_ids.append(subagent_resp.json()["id"])
+
         create_resp = await client.post("/api/agents", json={
             "name": "delegating-agent",
             "system_prompt": "Original",
@@ -488,24 +601,24 @@ async def test_update_agent_serializes_subagents_for_db_json_column(app_and_head
         update_resp = await client.put(f"/api/agents/{agent_id}", json={
             "subagents": [
                 {
-                    "agent_id": "power",
+                    "agent_id": subagent_ids[0],
                     "delegation_description": "当需要分析数据时调用它",
                 },
                 {
-                    "agent_id": "empty",
+                    "agent_id": subagent_ids[1],
                     "delegation_description": "当需要隔离执行简单任务时调用它",
-                }
+                },
             ],
         }, headers=headers)
 
         assert update_resp.status_code == 200
         assert update_resp.json()["subagents"] == [
             {
-                "agent_id": "power",
+                "agent_id": subagent_ids[0],
                 "delegation_description": "当需要分析数据时调用它",
             },
             {
-                "agent_id": "empty",
+                "agent_id": subagent_ids[1],
                 "delegation_description": "当需要隔离执行简单任务时调用它",
             },
         ]

@@ -397,6 +397,17 @@ from langchain_agentskills.loaders import DirectorySkillLoader, CompositeSkillLo
 - 项目处于早期开发阶段，可以破坏性修改 schema，无需兼容旧数据
 - 如 schema 改动大，可以删除 .db 文件重新启动。**但必须先询问用户确认！** 数据库中存有用户配置的 Agent preset，删库意味着丢失所有配置，重建很麻烦
 
+### 8.2 数据库旧表加字段时候的注意事项
+
+给已有表新增字段时，**必须写正式 Alembic revision**，同时改 SQLModel 表定义，两者缺一不可：
+
+1. `lc_agent/db/models.py` — 修改表模型加字段（Python 侧）
+2. `lc_agent/db/migrations/versions/` — 新建 revision 文件，`down_revision` 指向当前 head
+3. NOT NULL 新列必须带 `server_default`；模型侧空串默认值写 `server_default=text("''")`（纯 `""` 会被兜底补列逻辑拼出非法 DDL）
+4. 验证：跑覆盖该表的测试即可（fixture 在全新库上执行完整迁移链）
+
+`_add_missing_columns` 只是启动时的幂等兜底，不能替代正式 revision。
+
 ## 9. 常见陷阱
 
 1. **别在框架里写业务逻辑** — 工具、Agent、Skills 都应该在 bfzs 项目中

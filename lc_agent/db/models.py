@@ -91,6 +91,14 @@ class AgentPresetDB(SQLModel, table=True):
     display_name: str | None = Field(default=None)
     system_prompt: str = ""
     default_model: str = ""
+    default_delegation_description: str = Field(
+        default="",
+        sa_column=Column(String, nullable=False, server_default=text("''")),
+    )
+    can_be_subagent: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default=false()),
+    )
     allowed_tool_groups: list[str] | None = Field(default=None, sa_column=Column(JSON))
     allowed_mcp_servers: list[str] | None = Field(default=None, sa_column=Column(JSON))
     allowed_skills: list[str] | None = Field(default=None, sa_column=Column(JSON))

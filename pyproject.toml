@@ -38,6 +38,12 @@ dev = [
 desktop = [
     "pywebview>=5.0",
 ]
+# Optional: enables database.checkpoint_url with a PostgreSQL URL.
+postgres = [
+    "langgraph-checkpoint-postgres>=3.0",
+    "psycopg[binary,pool]>=3.1",
+    "psycopg2>=2.9",
+]
 
 [project.scripts]
 lc-agent = "lc_agent.main:main"

@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from unittest.mock import MagicMock
 
 from lc_agent.core.models import AgentPreset, SubAgentLink
@@ -37,6 +37,7 @@ def test_build_subagent_registry_uses_link_description_then_default_fallback():
         system_prompt="查资料",
         default_model="test-model",
         default_delegation_description="默认描述不会被使用",
+        can_be_subagent=True,
     )
     child_with_default = AgentPreset(
         id="child-with-default",
@@ -44,6 +45,7 @@ def test_build_subagent_registry_uses_link_description_then_default_fallback():
         system_prompt="做代码审查",
         default_model="test-model",
         default_delegation_description="当你需要代码审查时调用它",
+        can_be_subagent=True,
     )
     parent = AgentPreset(
         id="parent",
@@ -94,6 +96,7 @@ def test_build_agent_injects_single_task_tool_and_records_display_map(monkeypatc
         system_prompt="做研究",
         default_model="test-model",
         default_delegation_description="当你需要深入研究时调用它",
+        can_be_subagent=True,
     )
     parent = AgentPreset(
         id="parent-agent",
@@ -188,6 +191,7 @@ def test_build_agent_injects_delegation_prompt_into_subagent(monkeypatch):
         name="worker",
         system_prompt="你是专门做研究的助手。",
         default_model="test-model",
+        can_be_subagent=True,
     )
     engine._presets = {child.id: child}
 
@@ -210,11 +214,16 @@ def test_build_agent_injects_delegation_prompt_into_subagent(monkeypatch):
     # system_prompt is wrapped in <instructions> block
     assert system_prompt == "<instructions>\n你是专门做研究的助手。\n</instructions>"
 
-    # SubagentDelegationMiddleware が middleware[0] として prepend=True で注入される
+    # PatchToolCallsMiddleware is registered first, so index 0 is not the
+    # delegation middleware. Look it up by its registered middleware_name.
     assert middleware, "middleware list should not be empty"
-    assert middleware[0].name == "SubagentDelegationMiddleware"
-    assert middleware[0]._text == SUBAGENT_DELEGATION_PROMPT
-    assert middleware[0]._prepend is True
+    delegation = next(
+        (mw for mw in middleware if getattr(mw, "name", "") == "SubagentDelegationMiddleware"),
+        None,
+    )
+    assert delegation is not None, "SubagentDelegationMiddleware was not registered"
+    assert delegation._text == SUBAGENT_DELEGATION_PROMPT
+    assert delegation._prepend is True
 
 
 def test_build_agent_injects_task_system_prompt_middleware_when_subagents_configured(monkeypatch):
@@ -227,6 +236,7 @@ def test_build_agent_injects_task_system_prompt_middleware_when_subagents_config
         name="worker",
         system_prompt="研究助手",
         default_model="test-model",
+        can_be_subagent=True,
     )
     parent = AgentPreset(
         id="orchestrator",

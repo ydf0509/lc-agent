@@ -18,6 +18,10 @@ class ProviderConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     url: str = "sqlite+aiosqlite:///./lc_agent_data.db"
     checkpoint_path: str = "./lc_agent_checkpoints.db"
+    # LangGraph has no generic SQLAlchemy checkpointer: only SQLite and
+    # PostgreSQL exist as official savers. Set this to a PostgreSQL URL to use
+    # AsyncPostgresSaver; leave empty to fall back to checkpoint_path (SQLite).
+    checkpoint_url: str = ""
 
 
 class MemorySemanticSearchConfig(BaseModel):

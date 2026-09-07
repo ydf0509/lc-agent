@@ -88,9 +88,14 @@
     // ----- 数据库 -----
     "database": {
         // 对话历史存储（SQLAlchemy async URL）
+        // PostgreSQL: "postgresql+asyncpg://user:pass@localhost:5432/lcagent"
         "url": "sqlite+aiosqlite:///./lc_agent_data.db",
-        // LangGraph checkpoint 存储路径
-        "checkpoint_path": "./lc_agent_checkpoints.db"
+        // LangGraph checkpoint 存储路径（SQLite）
+        "checkpoint_path": "./lc_agent_checkpoints.db",
+        // 可选：填 PostgreSQL URL 则 checkpoint 走 AsyncPostgresSaver，
+        // 优先级高于 checkpoint_path。需先安装：pip install "lc-agent-app[postgres]"
+        // 注意：LangGraph 官方只提供 sqlite / postgres 两个 saver，没有通用 SQLAlchemy saver
+        "checkpoint_url": ""
     },
 
     "memory": {
