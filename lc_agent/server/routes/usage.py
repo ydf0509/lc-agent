@@ -60,7 +60,8 @@ async def _annotate_cost(
 ) -> list[dict]:
     """换算金额。SQL 永远按最细粒度返回（见 UsageRepository.summary），
     这里按调用方实际勾选的维度归并：token 求和，金额按行内各模型分别算好再相加；
-    任一模型没配价则整行 cost 为 None（前端显示 —）。"""
+    任一模型没配价则整行 cost 为 None（前端显示 —），
+    同时把没配价的模型名写进该行 unpriced_models，供页面提示"是哪个模型没设价"。"""
     prices = await _price_rows(db)
     # 缓存解析出的"各 kind 单价"而非金额——同 (bucket, model) 的多行 token 数不同，金额必须各算各的
     price_cache: dict[tuple, dict[str, float | None]] = {}
@@ -99,6 +100,7 @@ async def _annotate_cost(
                     "calls": 0,
                     "cost": 0.0,
                     "_missing": False,
+                    "_unpriced": set(),
                 }
             agg["input_tokens"] += row["input_tokens"] or 0
             agg["output_tokens"] += row["output_tokens"] or 0
@@ -109,6 +111,7 @@ async def _annotate_cost(
             c = _cost_of(row)
             if c is None:
                 agg["_missing"] = True
+                agg["_unpriced"].add(row["model_id"] or row["raw_model_id"])
             else:
                 agg["cost"] += c
         out = []
@@ -117,13 +120,24 @@ async def _annotate_cost(
                 agg["cost"] = None
             else:
                 agg["cost"] = round(agg["cost"], 4)
+            agg["unpriced_models"] = sorted(agg.pop("_unpriced"))
             out.append(agg)
         out.sort(key=lambda r: r["bucket"])
         return out
 
     for row in rows:
-        row["cost"] = _cost_of(row)
+        cost = _cost_of(row)
+        row["cost"] = cost
+        row["unpriced_models"] = [row["model_id"] or row["raw_model_id"]] if cost is None else []
     return rows
+
+
+def collect_unpriced_models(rows: list[dict]) -> list[str]:
+    """本次查询里所有没配单价的模型（去重排序），供页面提示"是哪个模型没设价"。"""
+    names: set[str] = set()
+    for row in rows:
+        names.update(row.get("unpriced_models") or [])
+    return sorted(names)
 
 
 @router.get("/admin/usage/summary")
@@ -145,7 +159,10 @@ async def admin_usage_summary(
         group_by=dims, granularity=granularity, include_sub=include_sub,
     )
     rows = await _annotate_cost(db, rows, granularity, dims)
-    return {"rows": rows, "group_by": dims, "granularity": granularity}
+    return {
+        "rows": rows, "group_by": dims, "granularity": granularity,
+        "unpriced_models": collect_unpriced_models(rows),
+    }
 
 
 async def _compute_total_cost(
@@ -156,8 +173,9 @@ async def _compute_total_cost(
     date_to: str,
     include_sub: bool,
     user_id: str | None = None,
-) -> float | None:
-    """总金额：按月归桶逐桶算钱后求和（口径与明细一致）。None = 有模型没配价。"""
+) -> tuple[float | None, list[str]]:
+    """总金额 + 未配价模型名单。金额按月归桶逐桶算钱后求和（口径与明细一致）；
+    None = 有模型没配价（前端显示 —，并提示是哪些模型没设价）。"""
     rows = await repo.summary(
         date_from=date_from, date_to=date_to,
         group_by=["bucket"], granularity="month", include_sub=include_sub,
@@ -165,7 +183,8 @@ async def _compute_total_cost(
     )
     rows = await _annotate_cost(db, rows, "month", ["bucket"])
     costs = [r["cost"] for r in rows]
-    return None if any(c is None for c in costs) else round(sum(costs), 4)
+    cost = None if any(c is None for c in costs) else round(sum(costs), 4)
+    return cost, collect_unpriced_models(rows)
 
 
 @router.get("/admin/usage/totals")
@@ -180,7 +199,7 @@ async def admin_usage_totals(
     date_from, date_to = _parse_range(from_d, to_d)
     repo = UsageRepository(db)
     totals = await repo.totals(date_from=date_from, date_to=date_to, include_sub=include_sub)
-    totals["cost"] = await _compute_total_cost(
+    totals["cost"], totals["unpriced_models"] = await _compute_total_cost(
         repo, db, date_from=date_from, date_to=date_to, include_sub=include_sub,
     )
     return totals
@@ -203,7 +222,7 @@ async def admin_usage_by_user(
     )
     rows = await _annotate_cost(db, rows, "month", ["user"])
     rows.sort(key=lambda x: x["input_tokens"] + x["output_tokens"], reverse=True)
-    return {"rows": rows}
+    return {"rows": rows, "unpriced_models": collect_unpriced_models(rows)}
 
 
 @router.get("/admin/usage/by-agent")
@@ -223,7 +242,7 @@ async def admin_usage_by_agent(
     )
     rows = await _annotate_cost(db, rows, "month", ["agent"])
     rows.sort(key=lambda x: x["input_tokens"] + x["output_tokens"], reverse=True)
-    return {"rows": rows}
+    return {"rows": rows, "unpriced_models": collect_unpriced_models(rows)}
 
 
 @router.get("/admin/usage/top-sessions")
@@ -276,6 +295,8 @@ async def admin_usage_export_csv(
         group_by=dims, granularity=granularity, include_sub=include_sub,
     )
     rows = await _annotate_cost(db, rows, granularity, dims)
+    for r in rows:
+        r.pop("unpriced_models", None)  # 内部提示字段，不进 CSV
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -367,8 +388,11 @@ async def me_usage(
         date_from=date_from, date_to=date_to,
         include_sub=include_sub, user_id=current_user.id,
     )
-    totals["cost"] = await _compute_total_cost(
+    totals["cost"], totals["unpriced_models"] = await _compute_total_cost(
         repo, db, date_from=date_from, date_to=date_to,
         include_sub=include_sub, user_id=current_user.id,
     )
-    return {"rows": rows, "totals": totals, "group_by": dims, "granularity": granularity}
+    return {
+        "rows": rows, "totals": totals, "group_by": dims, "granularity": granularity,
+        "unpriced_models": totals["unpriced_models"],
+    }

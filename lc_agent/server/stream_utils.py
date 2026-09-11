@@ -515,6 +515,49 @@ def accumulate_display_state(
                 tool_call["duration"] = int(time.time() * 1000) - start_time if start_time else None
                 tool_call["resultLength"] = len(error_str)
 
+    elif kind == "on_custom_event":
+        # 文件 diff / 写入预览只走 SSE 推送时，刷新后历史里就没有了。
+        # 这里把它们挂到同一 tool_call 上，随 tool_calls 一起入库，
+        # 历史接口原样返回，前端刷新后直接渲染当时的 diff。
+        # 注：custom 事件在子 Agent 内部执行时带多段 ns，
+        # _extract_tools_task_id 取的是第一段（父 task 工具），不是内部工具
+        # 自己的 id —— 内层调用目前走 subagent_tracker 存子会话，
+        # 所以这里只挂主 Agent 自己的工具（单段 ns），避免挂错位置。
+        custom_name = event.get("name", "")
+        data = event.get("data", {})
+        if not isinstance(data, dict):
+            return in_thinking
+        if custom_name not in ("file_edit_diff", "file_write_preview"):
+            return in_thinking
+        if is_in_subagent:
+            # 子 Agent 内部工具的 custom 事件：ns 第一段是父 task 工具，
+            # 挂到主 tool_calls 会错位；内层调用走子会话持久化，这里跳过
+            # （与 on_tool_start/end 跳过内层调用的逻辑一致）。
+            return in_thinking
+        tool_call_id = _extract_tools_task_id(checkpoint_ns) or event.get("run_id", "")
+        if tool_call_id:
+            tool_call = next(
+                (tc for tc in tool_calls if tc.get("runId") == tool_call_id), None,
+            )
+            if tool_call is not None:
+                if custom_name == "file_edit_diff":
+                    tool_call["fileDiff"] = {
+                        "file": data.get("file", ""),
+                        "start_line": data.get("start_line", 1),
+                        "context_before": data.get("context_before", []) or [],
+                        "removed": data.get("removed", []) or [],
+                        "added": data.get("added", []) or [],
+                        "context_after": data.get("context_after", []) or [],
+                    }
+                elif custom_name == "file_write_preview":
+                    tool_call["filePreview"] = {
+                        "file": data.get("file", ""),
+                        "mode": data.get("mode", "rewrite"),
+                        "preview_lines": data.get("preview_lines", []) or [],
+                        "total_lines": data.get("total_lines", 0),
+                        "start_line": data.get("start_line", 1),
+                    }
+
     return in_thinking
 
 

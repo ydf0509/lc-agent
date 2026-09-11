@@ -722,6 +722,7 @@ class UsageRepository:
                     "calls": 0,
                     "cost": 0.0,
                     "_cost_missing": False,
+                    "_unpriced": set(),
                 }
             if r["model_id"] and not agg["model_id"]:
                 agg["model_id"] = r["model_id"]
@@ -732,6 +733,7 @@ class UsageRepository:
             agg["calls"] += r["calls"] or 0
             if cost is None:
                 agg["_cost_missing"] = True
+                agg["_unpriced"].add(r["model_id"] or r["raw_model_id"] or "")
             else:
                 agg["cost"] += cost
 
@@ -742,6 +744,7 @@ class UsageRepository:
             else:
                 row["cost"] = round(row["cost"], 4)
             row.pop("_cost_missing")
+            row["unpriced_models"] = sorted(row.pop("_unpriced"))
         rows.sort(
             key=lambda x: (
                 x["cost"] is None,  # 配了价的排前面

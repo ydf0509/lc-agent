@@ -77,6 +77,10 @@
       <div class="stat-card stat-card--cost">
         <div class="stat-label">总消耗（元）</div>
         <div class="stat-value">{{ fmtCost(totals?.cost) }}</div>
+        <div v-if="totals && totals.cost === null" class="cost-hint">
+          <span>{{ unpricedHint }}</span>
+          <el-button link type="primary" size="small" @click="pricingOpen = true">去设置价格 →</el-button>
+        </div>
       </div>
       <div class="stat-card stat-card--tokens">
         <div class="stat-label">总 Token</div>
@@ -115,9 +119,21 @@
             <template #default="{ row }">{{ fmtNum(row.output_tokens) }}</template>
           </el-table-column>
           <el-table-column prop="calls" label="调用" width="80" align="right" />
-          <el-table-column label="金额（元）" min-width="110" align="right" fixed="right">
+          <el-table-column label="金额（元）" min-width="150" align="right" fixed="right">
             <template #default="{ row }">
-              <span :class="{ unpriced: row.cost === null }">{{ fmtCost(row.cost) }}</span>
+              <template v-if="row.cost === null">
+                <span class="unpriced">—</span>
+                <el-tooltip :content="unpricedTip(row.unpriced_models)" placement="top">
+                  <el-tag
+                    size="small"
+                    type="warning"
+                    effect="plain"
+                    class="unpriced-btn"
+                    @click="pricingOpen = true"
+                  >未定价</el-tag>
+                </el-tooltip>
+              </template>
+              <span v-else class="cost-strong">{{ fmtCost(row.cost) }}</span>
             </template>
           </el-table-column>
         </el-table>
@@ -142,9 +158,21 @@
             <template #default="{ row }">{{ fmtNum(row.output_tokens) }}</template>
           </el-table-column>
           <el-table-column prop="calls" label="调用" width="80" align="right" />
-          <el-table-column label="金额" width="110" align="right">
+          <el-table-column label="金额" width="150" align="right">
             <template #default="{ row }">
-              <span :class="{ 'cost-strong': row.cost != null }">{{ fmtCost(row.cost) }}</span>
+              <template v-if="row.cost === null">
+                <span class="unpriced">—</span>
+                <el-tooltip :content="unpricedTip(row.unpriced_models)" placement="top">
+                  <el-tag
+                    size="small"
+                    type="warning"
+                    effect="plain"
+                    class="unpriced-btn"
+                    @click="pricingOpen = true"
+                  >未定价</el-tag>
+                </el-tooltip>
+              </template>
+              <span v-else class="cost-strong">{{ fmtCost(row.cost) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="100" fixed="right">
@@ -181,7 +209,16 @@
           <template #default="{ row }">{{ (row.duration_ms / 1000).toFixed(1) }}s</template>
         </el-table-column>
         <el-table-column label="金额" width="100" align="right">
-          <template #default="{ row }">{{ fmtCost(row.cost) }}</template>
+          <template #default="{ row }">
+            <el-tooltip
+              v-if="row.cost === null"
+              :content="`模型 ${row.model_id || row.raw_model_id} 没设单价，这一笔算不出来`"
+              placement="top"
+            >
+              <span class="unpriced">—</span>
+            </el-tooltip>
+            <span v-else>{{ fmtCost(row.cost) }}</span>
+          </template>
         </el-table-column>
       </el-table>
     </el-dialog>
@@ -375,14 +412,13 @@ const totalTokens = computed(() =>
   (totals.value?.input_tokens ?? 0) + (totals.value?.output_tokens ?? 0)
 )
 
-// 汇总行里金额为 null 的模型 = 没设置价格（按模型名去重）
-const unpricedModels = computed(() => {
-  const names = new Set<string>()
-  for (const row of rows.value) {
-    if (row.cost === null && row.model_id) names.add(row.model_id)
-  }
-  return [...names]
-})
+// 未配价模型名单：后端给的（不按模型分组、行被归并后同样能拿到），summary + totals 两处合并
+const unpricedModels = ref<string[]>([])
+const unpricedHint = computed(() =>
+  unpricedModels.value.length > 0
+    ? `${unpricedModels.value.length} 个模型未设置单价，费用暂时算不出来`
+    : '有模型未设置单价，费用暂时算不出来'
+)
 
 function dimLabel(dim: string): string {
   const labels: Record<string, string> = {
@@ -430,6 +466,14 @@ function fmtCost(c: number | null | undefined): string {
   return `¥${c < 0.01 && c > 0 ? c.toFixed(4) : c.toFixed(2)}`
 }
 
+// 金额为 — 时的提示：告诉用户是哪个模型没设单价，点标签直接去设置
+function unpricedTip(names?: string[]): string {
+  const list = (names ?? []).join('、')
+  return list
+    ? `未设置单价的模型：${list}（点击去设置价格）`
+    : '有模型没设单价，这一行金额算不出来（点击去设置价格）'
+}
+
 function fmtTime(ts: string | null): string {
   if (!ts) return '—'
   try {
@@ -451,6 +495,9 @@ async function loadSummary() {
     totals.value = await api.getUsageTotals({
       from, to, include_sub: includeSub.value,
     })
+    unpricedModels.value = [
+      ...new Set([...(result.unpriced_models ?? []), ...(totals.value.unpriced_models ?? [])]),
+    ]
   } catch (e: any) {
     ElMessage.error(e.message || '加载用量失败')
   } finally {
@@ -801,6 +848,19 @@ onMounted(loadAll)
 }
 .unpriced {
   color: var(--el-text-color-secondary);
+}
+.unpriced-btn {
+  margin-left: 6px;
+  cursor: pointer;
+}
+.cost-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-color-warning);
 }
 .pricing-drawer-body {
   display: flex;

@@ -21,9 +21,11 @@ expectIncludes('& $Netstat -ano')
 expectIncludes('$RunLogDir')
 expectIncludes('bfzs-restart-')
 expectIncludes('Start-Process')
-expectIncludes('-RedirectStandardOutput')
-expectIncludes('-RedirectStandardError')
-expectIncludes('-PassThru')
+// 参数走 splat 哈希表（环境变量去重后要重试，得复用同一组参数），
+// 所以查 hashtable 的键名，而不是 -RedirectStandardOutput 这种字面量
+expectIncludes('RedirectStandardOutput')
+expectIncludes('RedirectStandardError')
+expectIncludes('PassThru')
 expectIncludes('".tmp"')
 expectIncludes('"bfzs-runlogs"')
 expectIncludes("$processPath = [System.Environment]::GetEnvironmentVariable('Path', 'Process')")
@@ -38,6 +40,13 @@ expectMatch(
   /\$proc\.HasExited[\s\S]*throw "bfzs server exited before listening/,
   '后台进程提前退出时应失败并提示日志',
 )
+
+// 沙箱 / 受限环境容错（2026-09-10 补）：这几处原先都会把重启流程直接带崩
+expectIncludes('netstat fallback unavailable')
+expectIncludes('node_modules\\vite\\bin\\vite.js')
+expectIncludes('nodeCandidates')
+expectIncludes('dropping duplicate env var on retry')
+expectIncludes('node.exe not found; add node to PATH')
 
 if (failures.length > 0) {
   console.error('bfzs 重启脚本契约测试失败:')

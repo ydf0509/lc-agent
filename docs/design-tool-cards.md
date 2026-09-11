@@ -14,14 +14,15 @@
 
 已经证明“按工具分发”是对的路：`write_todos`→`TodoProgressCard`、`subagent`→`SubAgentCard`、`ask_user`→`InterruptDialog`、文件变更→抽屉。本方案就是把这条路补完，覆盖高频内置工具。
 
-## 2. 设计原则（5 条）
+## 2. 设计原则（6 条）
 
 1. **标题说人话**：头部是“动词 + 对象”（改了哪个文件、跑了什么命令），原始英文 tool 名只放次要位置或 tooltip，不做主标题。
 2. **高频做厚、低频做薄**：编辑 / 写入 / 命令三种精致化；读取 / 搜索 / 列表反向优化——默认压成一行，点开再看。
 3. **刷新后还能看到当时的 diff**（2026-09-10 补）：`file_edit_diff` / `file_write_preview` 事件在 `accumulate_display_state` 里挂到同一 tool_call 上（`fileDiff` / `filePreview`），随 `tool_calls` JSON 一起入库；历史接口原样返回，前端 `normalizeHistoryMessage` 保留字段后直接渲染。子 Agent 内部工具的 diff 事件跳过（ns 第一段是父 task，会挂错位置；内层调用走子会话自己的历史）。
-3. **状态沿用现有语言**：running 蓝、done 绿、error 红，左侧框线 + running 呼吸灯 + done 扫光保持不变，不另起一套颜色。
-4. **默认折叠省空间**：done 默认收起，running / error 默认展开。用户点头部任意位置切换。**例外**（2026-09-10）：编辑/写入文件卡（`edit_block` / `write_file`）不自动折叠——`useToolCard` 传 `keepExpanded: true`，完成后也保持展开，只有用户手动点才收（改了什么要一眼看到，尤其刷新后）。
-5. **后端零改动**：纯前端按 tool 名分发，解析现有返回字符串；`fileDiff` / `filePreview` / `streamingOutput` / `pid` 等现成结构化字段直接用，不新增 SSE 事件。
+4. **状态沿用现有语言**：running 蓝、done 绿、error 红，左侧框线 + running 呼吸灯 + done 扫光保持不变，不另起一套颜色。
+5. **默认折叠省空间**：done 默认收起，running / error 默认展开。用户点头部任意位置切换。**例外**（2026-09-10）：编辑/写入文件卡（`edit_block` / `write_file`）不自动折叠——`useToolCard` 传 `keepExpanded: true`，完成后也保持展开，只有用户手动点才收（改了什么要一眼看到，尤其刷新后）。
+6. **展开区三段栅格**（2026-09-10 补）：所有卡的展开区统一是「工具 → 目标 → 内容」三段，左列 32px 灰色小字标签、右侧内容。工具段显示原始工具名（等宽 + 复制），人话名已经在头部，不重复。标签按卡分别定名，不强行统一成「入参 / 结果」——那套词套到 diff 和命令输出上不准。
+7. **后端零改动**：纯前端按 tool 名分发，解析现有返回字符串；`fileDiff` / `filePreview` / `streamingOutput` / `pid` 等现成结构化字段直接用，不新增 SSE 事件。
 
 ## 3. 总览：工具 → 卡片
 
@@ -130,6 +131,19 @@
 - 颜色：状态色只用 Element Plus 变量（primary/success/danger/warning）；diff 红绿沿用现有 `#f85149` / `#3fb950`；终端黑 `#0d1117` 全主题统一。
 - 字体：标题 13px 系统字体，命令/路径/diff/输出一律 JetBrains Mono 等宽 12px。
 - 头部永远包含：图标 + 人话标题 + 状态（跑动计时 / 完成耗时 / 错误红字）；原始 tool 名藏进 tooltip。
+- **展开区三段栅格**（2026-09-10 定）：左列 `ToolField.vue` 统一 32px 宽、11px 灰色标签（深色卡 tone="dark" 走 `#7d8590`），右侧内容。四张卡的分段：
+
+  | 卡 | 第一段 | 第二段 | 第三段 |
+  |---|---|---|---|
+  | 通用 | 工具 | 入参 | 结果 / 错误 |
+  | 编辑 | 工具 | 文件 | 改动 |
+  | 写入 | 工具 | 文件 | 内容 |
+  | 终端 | 工具 | 命令 | 输出 / 错误 |
+
+  工具段显示原始工具名（等宽 12px + 复制按钮）；人话名在头部，展开区不重复。命令段自带 `$` 提示 + 复制按钮（终端卡内独立样式）。错误段在折叠态也直接露出，不被折叠藏起来。
+- **入参渲染规则**（2026-09-10 定）：单行且 ≤160 字符 → 紧跟参数名内联；多行或更长 → 独立浅底块（`max-height: 132px`）＋「看全文」按钮。`key` 是 11px 灰色小字，`value` 是 12px 等宽正文色——主次和旧版相反（旧版 key 用主题蓝，比 value 还抢眼）。**不再硬截断**：超 2000 字符只截显示、不截数据，点「看全文」走 `CodeBlockModal` 看完整内容。对象/数组按 2 空格缩进 JSON 展开。
+- **弹层目标**：结果和某个入参共用一个 `CodeBlockModal`，用带类型的 `ModalTarget`（`{kind:'result'} | {kind:'arg', key}`）区分，不用字符串哨兵——否则某个入参正好叫 `result` 会串台。
+- **复制按钮多槽位**：一张卡里工具名、命令各有一个复制按钮，`useToolCard` 用 `copyStates` 按 key 分别存状态（`copyLabel(key)` / `copyText(text, key)`），不共用单槽状态。
 - 返回内容徽章（2026-09-10 补回）：done 后头部显示 `📦 1.2K chars | ~340 tokens`（旧 `ToolCallCard` 原有功能，拆卡时丢了，现抽到 `useToolCard` 公共返回：`resultSizeText` + `tokenText`）。token 用 `js-tiktoken` 懒加载 `cl100k_base` 估算，结果 > 500K 字符不估；编辑/写入/终端/通用四类卡都显示。
 - 移动端 520px 下：头部换行、标题占满一行（沿用现有 media query 写法），终端卡横向可滚、全屏 modal 占满。
 - 动效：只保留现有 running 呼吸灯 + done 扫光；`prefers-reduced-motion` 下全关（已有代码保留）。
@@ -153,5 +167,21 @@
 - 契约测试 `frontend/scripts/check-tool-cards-contract.mjs`（`npm run test:tool-cards`），宽度/历史/编辑三份旧契约同步通过
 - 预览页：`/test-segments` 改成 7 组 P0 样例（编辑/新建/追加/短命令/流式中/失败命令/通用兜底）
 - 构建产物已同步到 `lc_agent/web/dist`（构建时如遇 safe-delete 锁或 rolldown 1224 文件锁，等几秒用 `--emptyOutDir=false` 重试即可）
+
+## 13. 展开区栅格实施记录（2026-09-10 第二轮）
+
+新增 `ToolField.vue`（左列标签 + 右内容 + 可选复制按钮，`tone="dark"` 给终端卡），三张卡接入：
+
+- `ToolGenericCard.vue` — 工具 / 入参 / 结果（错误时第三段换「错误」）。入参去掉 200 字符硬截断，改内联/块二选一 + 「看全文」。
+- `ToolFileCard.vue` — 工具 / 文件 / 改动|内容。文件名从旧的黑底标题条挪进「文件」段，改成浅底等宽可点；「看全文 / 在抽屉里看」挪到「改动 / 内容」段底部。头部 tooltip 改用 `fullTitle`（`改 a.py（src/…/a.py）`），顺手删掉之前攒下的 `void fullTitle` 死代码。
+- `ToolTerminalCard.vue` — 工具 / 命令 / 输出（全部 `tone="dark"`）。命令段保留 `$` + 复制按钮（卡内独立 `tt-copy`，跟工具名复制按钮各存各的状态）。删掉没用上的 `escapeHtml`，给 `v-html` 里的 `[stderr]` 标签补了 `:deep(.stderr-tag)` 上色（scoped 样式进不去 `v-html`）。
+- `useToolCard.ts` — 单槽 `copyState` 换成多槽 `copyStates` + `copyLabel(key)` / `copyText(text, key)`。
+- 契约测试补 10 条断言（ToolField 引入、四张卡的工具名行、各卡标签文字、`tone="dark"`、多槽复制、入参不再硬截断、`ModalTarget`、样例折叠开关）；`/test-segments` 扩到 10 组，样例支持自带 `collapsed` 开关。
+
+**本轮修掉的坑**：
+
+- 弹层原本用字符串哨兵 `'result'` 区分「结果」和「某个入参」，入参正好叫 `result` 会串台 → 改带类型的 `ModalTarget`。
+- `/test-segments` 第 10 组标着「折叠态露出错误」但模板写死 `:collapsed="false"`，根本测不出折叠 → 样例自带宽窄开关。
+- `restart.ps1` 三处环境坑：`netstat.exe` 在沙箱里起不来却被 `$ErrorActionPreference="Stop"` 当致命错误（改 try/catch 容错，`Get-NetTCPConnection` 是主路径）；`npx vite build` 走 cmd.exe 包装脚本起不来（改成直接用 node 跑 `node_modules/vite/bin/vite.js`）；`Get-Command node` 在非交互会话里取不到 node（改成候选列表探测，含 WorkBuddy 托管版本目录）。
 
 **明确不做**：卡内直接改文件/重跑命令（只读展示，改文件走抽屉+对话）；卡片主题自定义；后端新增结构化字段（一期只靠解析现有字符串）。

@@ -476,6 +476,7 @@ async def test_summary_merges_models_when_not_grouped(db_env):
         merged = await _annotate_cost(session, rows, "month", ["user"])
         # 归并后同月同用户只剩一行，token 求和、金额按各模型分别算后相加
         assert len(merged) == 1
+        assert merged[0]["unpriced_models"] == []  # 两个模型都配了价 → 名单为空
         assert merged[0]["input_tokens"] == 3000
         assert merged[0]["output_tokens"] == 300
         assert merged[0]["cost"] == round(1000 / 1e6 * 1.0 + 100 / 1e6 * 4.0
@@ -576,3 +577,42 @@ async def test_pricing_post_then_summary_shows_cost(app_with_usage):
         )
         costs = {r["model_id"]: r["cost"] for r in resp.json()["rows"]}
         assert costs["m-b"] == 4.2
+
+
+@pytest.mark.asyncio
+async def test_merged_rows_report_unpriced_models(app_with_usage):
+    """回归（2026-09-10）：不按模型分组时，归并行不能丢"哪个模型没配价"的信息。
+
+    此前归并只回 cost=None，前端拿不到模型名 → 页面显示 — 却没有提示；
+    现在每行（含归并行）都带 unpriced_models，summary / totals 响应顶层再带一份汇总。
+    """
+    app, headers = app_with_usage
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get(
+            "/api/admin/usage/summary",
+            params={"from": "2000-01-01", "to": "2099-12-31", "group_by": "user", "granularity": "month"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["rows"]) == 2  # alice / bob 各一行（已归并）
+        for row in data["rows"]:
+            assert "model_id" not in row  # 归并行不带模型列
+            assert "unpriced_models" in row
+        by_user = {r["user"]: r for r in data["rows"]}
+        assert by_user["alice"]["cost"] is not None
+        assert by_user["alice"]["unpriced_models"] == []
+        assert by_user["bob"]["cost"] is None
+        assert by_user["bob"]["unpriced_models"] == ["m-b"]
+        assert data["unpriced_models"] == ["m-b"]
+
+        resp = await client.get(
+            "/api/admin/usage/totals",
+            params={"from": "2000-01-01", "to": "2099-12-31"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        totals = resp.json()
+        assert totals["cost"] is None
+        assert totals["unpriced_models"] == ["m-b"]

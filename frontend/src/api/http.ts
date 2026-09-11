@@ -15,6 +15,8 @@ export interface UsageSummaryRow {
   reasoning_tokens?: number
   calls: number
   cost: number | null
+  // 该行里没配单价的模型名（后端归并后也会带上；金额为 — 时用它提示是哪个模型）
+  unpriced_models?: string[]
 }
 
 export interface UsageTotals {
@@ -26,6 +28,7 @@ export interface UsageTotals {
   active_users: number
   session_count: number
   cost: number | null
+  unpriced_models?: string[]
 }
 
 export interface UsageSessionRow {
@@ -42,6 +45,7 @@ export interface UsageSessionRow {
   cache_write_tokens: number
   calls: number
   cost: number | null
+  unpriced_models?: string[]
 }
 
 export interface UsageCallRow {
@@ -260,7 +264,7 @@ export const api = {
 
   // Token 用量统计（docs/tasks/token_stats.md §5）
   getUsageSummary: (params: { from: string; to: string; group_by: string; granularity: string; include_sub: boolean }) =>
-    fetchApi<{ rows: UsageSummaryRow[]; group_by: string[]; granularity: string }>(
+    fetchApi<{ rows: UsageSummaryRow[]; group_by: string[]; granularity: string; unpriced_models: string[] }>(
       `/admin/usage/summary?${new URLSearchParams({
         from: params.from, to: params.to, group_by: params.group_by,
         granularity: params.granularity, include_sub: String(params.include_sub),
@@ -280,7 +284,7 @@ export const api = {
   addPricing: (data: { model: string; kind: string; price_per_1m: number; effective_from?: string; note?: string }) =>
     fetchApi<PriceRow>('/admin/usage/pricing', { method: 'POST', body: JSON.stringify(data) }),
   getMyUsage: (params: { from: string; to: string; group_by: string; granularity: string; include_sub: boolean }) =>
-    fetchApi<{ rows: UsageSummaryRow[]; totals: UsageTotals; group_by: string[]; granularity: string }>(
+    fetchApi<{ rows: UsageSummaryRow[]; totals: UsageTotals; group_by: string[]; granularity: string; unpriced_models: string[] }>(
       `/me/usage?${new URLSearchParams({
         from: params.from, to: params.to, group_by: params.group_by,
         granularity: params.granularity, include_sub: String(params.include_sub),

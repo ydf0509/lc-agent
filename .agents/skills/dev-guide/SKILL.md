@@ -264,6 +264,54 @@ D:\ProgramData\Miniconda3\envs\py312\python.exe -m pytest tests/ -v
 - 仓库根严禁放与常用工具同名的 .py（pytest.py / conftest.py 等，会因 cwd 优先被当模块加载）
 - 若 pytest 输出异常为空，先确认没有同名劫持文件；结果可 `--junitxml` 或落盘再读
 
+### 前端契约测试
+
+```bash
+cd D:/codes/lc-agent/frontend
+for f in scripts/check-*.mjs; do node "$f" >/dev/null 2>&1 && echo "PASS $f" || echo "FAIL $f"; done
+```
+
+**改了代码后契约变红，先分清是不是自己改坏的** —— 用临时 worktree 在 HEAD 上跑同一批契约做对照：
+
+```bash
+cd D:/codes/lc-agent
+git worktree add --detach .tmp/head-check HEAD
+cd .tmp/head-check/frontend && node scripts/check-tool-cards-contract.mjs   # 同样的脚本，读的是 HEAD 的代码
+cd D:/codes/lc-agent && git worktree remove --force .tmp/head-check
+```
+
+HEAD 上也失败 = 既有问题，别顺手大改；HEAD 上通过 = 自己改出来的，必须修。
+
+注意：契约脚本大多用 `process.cwd()` 当根目录，**必须在 `frontend/` 下运行**，否则读不到文件。
+
+### 页面 UI 验证（无头浏览器截图 + DOM 断言）
+
+改完前端要确认页面真实效果（提示出现没有、按钮能不能点）时，用 Python Playwright + 本机 Chromium 直连：
+
+```powershell
+# 骨架脚本见 skill 目录 scripts/page_check_template.py，复制改断言即可
+D:\ProgramData\Miniconda3\envs\py312\python.exe scripts/page_check_template.py
+```
+
+三个实测坑：
+
+1. **别用 agent-browser**（2026-09-10 实测 0.34.0）：在工具会话里 `open` 会卡死（超 4 分钟无响应），
+   换 `--session` 名也无效。残留守护进程用 `taskkill /F /T /PID <pid>` 清（pid 见 `~/.agent-browser/default.pid`）。
+2. **Python playwright 的默认浏览器版本与已装的 chromium-1223 不匹配**（会提示 `playwright install`），
+   必须显式指定：
+   ```python
+   EXE = r'C:\Users\<user>\AppData\Local\ms-playwright\chromium-1223\chrome-win64\chrome.exe'
+   browser = p.chromium.launch(headless=True, executable_path=EXE)
+   ```
+3. **登录态靠 JWT 注入 localStorage**：secret 在 bfzs `config.jsonc` 的 `auth.secret`，
+   user id 从 `bfzs_data.db` 的 `users` 表查；`ctx.add_init_script` 里 `localStorage.setItem('token', ...)`
+   后直接访问 `#/admin/usage` 这类需要登录的路由。（dev 环境的 secret 才可这样用，不要外传）
+
+**写跨行断言要归一化行尾**：`assertNotContains(file, "foo\n      return")` 这种带 `\n` 的 needle 是行尾敏感的——
+CRLF 检出下永远匹配不上，于是**假通过**（`check-code-agent-contract.mjs` 就这么骗过一次）。
+需要跨行匹配时先 `content.replace(/\r\n/g, '\n')`。
+
+
 ## 6. 关键设计模式
 
 ### 6.1 工具注册 — 导入即注册

@@ -32,6 +32,7 @@
       <div class="stat-card stat-card--cost">
         <div class="stat-label">期间消耗（元）</div>
         <div class="stat-value">{{ fmtCost(totals?.cost) }}</div>
+        <div v-if="totals && totals.cost === null" class="cost-hint">{{ unpricedHint }}</div>
       </div>
       <div class="stat-card stat-card--tokens">
         <div class="stat-label">期间 Token</div>
@@ -66,7 +67,10 @@
       <el-table-column prop="calls" label="调用" width="80" align="right" />
       <el-table-column label="金额（元）" min-width="110" align="right">
         <template #default="{ row }">
-          <span :class="{ unpriced: row.cost === null }">{{ fmtCost(row.cost) }}</span>
+          <el-tooltip v-if="row.cost === null" :content="unpricedTip(row.unpriced_models)" placement="top">
+            <span class="unpriced">—</span>
+          </el-tooltip>
+          <span v-else>{{ fmtCost(row.cost) }}</span>
         </template>
       </el-table-column>
     </el-table>
@@ -103,6 +107,14 @@ const loading = ref(false)
 const rows = ref<UsageSummaryRow[]>([])
 const totals = ref<UsageTotals | null>(null)
 
+// 未配价模型名单（后端给）：费用显示 — 时说明原因
+const unpricedModels = ref<string[]>([])
+const unpricedHint = computed(() =>
+  unpricedModels.value.length > 0
+    ? `${unpricedModels.value.length} 个模型未设置单价，费用暂时算不出来（请联系管理员设置）`
+    : '有模型未设置单价，费用暂时算不出来（请联系管理员设置）'
+)
+
 const totalTokens = computed(() =>
   // input_tokens 已含命中/写入缓存明细（langchain 口径），直接相加会重复统计
   (totals.value?.input_tokens ?? 0) + (totals.value?.output_tokens ?? 0)
@@ -118,6 +130,12 @@ function fmtCost(c: number | null | undefined): string {
   return `¥${c < 0.01 && c > 0 ? c.toFixed(4) : c.toFixed(2)}`
 }
 
+// 金额为 — 时的提示：哪个模型没设单价
+function unpricedTip(names?: string[]): string {
+  const list = (names ?? []).join('、')
+  return list ? `未设置单价的模型：${list}` : '有模型未设置单价，这一行金额算不出来'
+}
+
 async function load() {
   loading.value = true
   try {
@@ -129,6 +147,7 @@ async function load() {
     })
     rows.value = result.rows
     totals.value = result.totals
+    unpricedModels.value = result.unpriced_models ?? []
   } catch (e: any) {
     ElMessage.error(e.message || '加载用量失败')
   } finally {
@@ -214,6 +233,11 @@ onMounted(load)
 }
 .unpriced {
   color: var(--el-text-color-secondary);
+}
+.cost-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--el-color-warning);
 }
 </style>
 
