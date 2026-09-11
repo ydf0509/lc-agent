@@ -26,6 +26,7 @@
     "test:chat-http-ui": "node scripts/check-chat-http-ui-contract.mjs",
     "test:subagent-reducers": "node scripts/check-subagent-reducers-contract.mjs",
     "test:agent-editor-general-purpose": "node scripts/check-agent-editor-general-purpose-contract.mjs",
+    "test:tool-cards": "node scripts/check-tool-cards-contract.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

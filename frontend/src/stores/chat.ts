@@ -265,6 +265,9 @@ function normalizeHistoryMessage(msg: any): ChatMessage | null {
     resultLength: tc.resultLength ?? tc.result_length ?? tc.result?.length,
     is_subagent: tc.is_subagent || false,
     sub_session_id: tc.sub_session_id || '',
+    // 后端入库时已把当时的 diff 挂在 tool_call 上，刷新后直接渲染
+    fileDiff: tc.fileDiff ?? tc.file_diff,
+    filePreview: tc.filePreview ?? tc.file_preview,
   }))
   const usage = normalizeHistoryUsage(msg.usage)
   if (usage && toolCalls.length > usage.toolCallCount) {

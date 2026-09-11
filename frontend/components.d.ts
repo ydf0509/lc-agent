@@ -73,7 +73,14 @@ declare module 'vue' {
     TodoProgressCard: typeof import('./src/components/chat/TodoProgressCard.vue')['default']
     TokenUsagePanel: typeof import('./src/components/chat/TokenUsagePanel.vue')['default']
     ToolCallCard: typeof import('./src/components/chat/ToolCallCard.vue')['default']
+    ToolCardRouter: typeof import('./src/components/chat/tools/ToolCardRouter.vue')['default']
+    ToolField: typeof import('./src/components/chat/tools/ToolField.vue')['default']
+    ToolFileCard: typeof import('./src/components/chat/tools/ToolFileCard.vue')['default']
+    ToolFileEditCard: typeof import('./src/components/chat/tools/ToolFileEditCard.vue')['default']
+    ToolFileWriteCard: typeof import('./src/components/chat/tools/ToolFileWriteCard.vue')['default']
+    ToolGenericCard: typeof import('./src/components/chat/tools/ToolGenericCard.vue')['default']
     ToolGroupPanel: typeof import('./src/components/panels/ToolGroupPanel.vue')['default']
+    ToolTerminalCard: typeof import('./src/components/chat/tools/ToolTerminalCard.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

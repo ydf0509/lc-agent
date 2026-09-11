@@ -194,7 +194,7 @@
                       />
                     </div>
                   </template>
-                  <ToolCallCard
+                  <ToolCardRouter
                     v-else
                     :tool-call="item.toolCalls[seg.toolIndex!]"
                     :collapsed="item.toolCalls[seg.toolIndex!]?.status === 'done'"
@@ -347,7 +347,7 @@ import { useFileChangesStore } from '@/stores/file-changes'
 import { renderMarkdown } from '@/utils/markdown'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import InterruptDialog from '@/components/chat/InterruptDialog.vue'
-import ToolCallCard from '@/components/chat/ToolCallCard.vue'
+import ToolCardRouter from '@/components/chat/tools/ToolCardRouter.vue'
 import SubAgentCard from '@/components/chat/SubAgentCard.vue'
 import TodoProgressCard from '@/components/chat/TodoProgressCard.vue'
 import HttpTracesGroup from '@/components/chat/HttpTracesGroup.vue'

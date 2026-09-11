@@ -19,7 +19,7 @@
       <div class="bubble-content">
         <template v-if="message.role === 'assistant'">
           <template v-for="(seg, idx) in renderedSegments" :key="idx">
-            <ToolCallCard v-if="seg.type === 'tool' && seg.toolCall && !shouldShowSubAgentCard(seg.toolCall)" :tool-call="seg.toolCall" :collapsed="true" />
+            <ToolCardRouter v-if="seg.type === 'tool' && seg.toolCall && !shouldShowSubAgentCard(seg.toolCall)" :tool-call="seg.toolCall" :collapsed="true" />
             <SubAgentCard
               v-else-if="seg.type === 'tool' && seg.toolCall && shouldShowSubAgentCard(seg.toolCall)"
               :entry="getSubAgentEntryForTool(seg.toolCall)!"
@@ -48,7 +48,7 @@
 import { computed } from 'vue'
 import { renderMarkdown } from '@/utils/markdown'
 import { useToolsStore } from '@/stores/tools'
-import ToolCallCard from './ToolCallCard.vue'
+import ToolCardRouter from './tools/ToolCardRouter.vue'
 import SubAgentCard from './SubAgentCard.vue'
 import TokenUsagePanel from './TokenUsagePanel.vue'
 import type { ChatMessage, ToolCall, SubAgentEntry } from '@/stores/chat'

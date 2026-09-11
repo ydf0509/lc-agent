@@ -1,0 +1,18 @@
+import{Bt as e,Fn as t,Jt as n,Lt as r,Ut as i,cn as a,on as o,qt as s}from"./_plugin-vue_export-helper-81LZ6tJY.js";import{t as c}from"./index-UnXvjSGh.js";var l={style:{padding:`20px`,background:`var(--el-bg-color-page)`,"min-height":`100vh`,color:`var(--el-text-color-regular)`}},u={style:{display:`flex`,"flex-direction":`column`,gap:`16px`,"max-width":`860px`}},d={style:{"font-size":`12px`,color:`var(--el-text-color-secondary)`,"margin-bottom":`4px`}},f=n({__name:`TestSegments`,setup(n){function f(e){return{status:`done`,duration:800,startTime:Date.now()-800,...e}}let p=[{label:`1. edit_block（有 diff）`,toolCall:f({name:`file_write__edit_block`,args:{file_path:`src/app.py`,old_string:`timeout = 30`,new_string:`timeout = 60`},result:`Replaced 1 occurrence(s) in src/app.py
+  1 lines → 1 lines`,fileDiff:{file:`src/app.py`,start_line:40,context_before:[`ctx = load()`,`retry = 3`],removed:[`timeout = 30`],added:[`timeout = 60`],context_after:[`logger.info("ok")`]}})},{label:`2. write_file 新建`,toolCall:f({name:`file_write__write_file`,args:{path:`docs/report.md`,content:`# 周报
+
+- 进展 ...
+`},result:`Written 20 lines to docs/report.md`,filePreview:{file:`docs/report.md`,mode:`rewrite`,preview_lines:[`# 周报`,``,`- 进展 ...`],total_lines:20,start_line:1}})},{label:`3. write_file 追加`,toolCall:f({name:`file_write__write_file`,args:{path:`logs/app.log`,content:`2026-09-10 ok
+`,mode:`append`},result:`Appended 1 lines to logs/app.log`,filePreview:{file:`logs/app.log`,mode:`append`,preview_lines:[`2026-09-10 ok`],total_lines:101,start_line:101}})},{label:`4. run_command 短命令（成功）`,toolCall:f({name:`command__run_command`,args:{command:`git status --short`},result:` M src/app.py
+?? docs/report.md
+[exit_code=0, duration=230ms]`})},{label:`5. run_command 长流式（进行中）`,toolCall:{name:`command__run_command`,args:{command:`npm run dev --port 3000`},status:`running`,startTime:Date.now()-2300,streamingOutput:`$ npm run dev --port 3000
+ready in 1.2s · listening on :3000
+`}},{label:`6. run_command 失败`,toolCall:{name:`command__run_command`,args:{command:`pytest tests/test_missing.py`},status:`error`,duration:1500,startTime:Date.now()-1500,result:`ERROR: file or directory not found: tests/test_missing.py
+[exit_code=4, duration=1500ms]`}},{label:`7. 通用兜底（read_file）`,toolCall:f({name:`file_read__read_file`,args:{path:`src/app.py`,offset:0,length:50},result:`[Lines 1-50 of 120 total]
+import os
+...`})},{label:`8. load_skill（展开区显示原始工具名 + 入参）`,toolCall:f({name:`load_skill`,args:{skill_name:`anysearch`},result:`## Overview
+AnySearch is a unified real-time search service supporting general web search, vertical domain search, parallel fetching and structured extraction.
+
+## When to use
+- The user asks for current facts that need the open web.
+`})},{label:`9. 通用兜底（长 / 多行入参走块渲染 + 看全文）`,toolCall:f({name:`mcp__codegraph__codegraph_explore`,args:{query:`how does the tool card router dispatch`,options:{depth:3,include_tests:!1,languages:[`python`,`typescript`]},extra_notes:`这是一段很长的说明文字，用来验证超过一行的入参不会再把卡片撑爆，而是收进一个固定高度的块里，右下角给一个看全文的入口，点开走弹层看完整内容。`},result:`found 12 symbols`})},{label:`10. 通用兜底（折叠态仍然直接露出错误）`,collapsed:!0,toolCall:{name:`file_read__read_file`,args:{path:`src/not_exists.py`},status:`error`,duration:120,startTime:Date.now()-120,result:`FileNotFoundError: src/not_exists.py`}}];return(n,f)=>(o(),i(`div`,l,[f[0]||=e(`h2`,null,`Tool Cards P0 Preview`,-1),f[1]||=e(`div`,{style:{margin:`10px 0`,"font-size":`12px`,color:`var(--el-text-color-secondary)`}},` 编辑 / 新建 / 追加 / 短命令 / 长流式 / 失败命令 / 通用兜底 / 技能加载 / 长入参 / 折叠态出错，共 10 组 `,-1),e(`div`,u,[(o(),i(r,null,a(p,n=>e(`section`,{key:n.label},[e(`div`,d,t(n.label),1),s(c,{"tool-call":n.toolCall,collapsed:n.collapsed??!1},null,8,[`tool-call`,`collapsed`])])),64))])]))}});export{f as default};
