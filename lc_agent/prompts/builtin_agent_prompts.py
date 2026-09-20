@@ -49,7 +49,7 @@ COMMAND_USAGE_PROMPT = """\
 <command_rules>
 ## 命令执行规范
 
-- `run_command` 在 Windows 上使用 PowerShell，在 Linux/macOS 上使用 $SHELL
+- `run_command` 在 Windows 上使用 PowerShell，在 Linux/macOS 上使用 $SHELL，执行命令行前先看 project_context 的 OS 行，严禁在 Windows 上执行 Linux 命令
 - **Windows PowerShell (5.1) 不支持 `&&` 链接命令**；需要顺序执行且依赖前一步成功时，
   使用 `cmd1; if ($?) { cmd2 }` 的 PowerShell 写法
 - 运行可能挂起或耗时很长的命令（如服务器、监控进程）时，使用 `start_background_process`；

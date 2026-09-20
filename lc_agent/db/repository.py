@@ -401,6 +401,15 @@ class ChatUiMessageRepository:
     async def get_by_id(self, message_id: str) -> ChatUiMessage | None:
         return await self.session.get(ChatUiMessage, message_id)
 
+    async def list_ids_roles(self, session_id: str) -> list[tuple[str, str]]:
+        """按会话顺序返回 (id, role)，只取两列，供轮次号计算用。"""
+        result = await self.session.execute(
+            select(ChatUiMessage.id, ChatUiMessage.role)
+            .where(ChatUiMessage.session_id == session_id)
+            .order_by(ChatUiMessage.created_at, ChatUiMessage.id)
+        )
+        return [(row[0], row[1]) for row in result.all()]
+
     async def truncate_from_message(self, session_id: str, message_id: str) -> int:
         anchor = await self.session.get(ChatUiMessage, message_id)
         if anchor is None or anchor.session_id != session_id:

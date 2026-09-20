@@ -3,8 +3,9 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 const STORAGE_KEY_LEFT = 'lc-agent:layout:leftWidth'
 const STORAGE_KEY_RIGHT = 'lc-agent:layout:rightWidth'
 
-const DEFAULT_LEFT_WIDTH = 312
-const DEFAULT_RIGHT_WIDTH = 350
+const DEFAULT_LEFT_WIDTH = 230
+/* 右侧承担文件代码/diff 展示，默认给宽些 */
+const DEFAULT_RIGHT_WIDTH = 810
 const MIN_WIDTH = 200
 const MAX_LEFT_WIDTH = 600
 /* 右侧面板内容多为长路径/diff/表格，上限放宽，只受"给聊天区留多少"约束 */

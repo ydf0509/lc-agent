@@ -598,14 +598,16 @@ const bubbleList = computed((): ChatBubbleItem[] => {
   const filtered = messages.value
     .filter(msg => msg.role === 'user' || msg.role === 'assistant')
 
-  // 轮次号 = 用户消息序号（和后端 FileChange.round_number 同口径）：
+  // 轮次号（和后端 FileChange.round_number 同口径）：
+  // 历史消息用后端带回的 round_number（分页加载时本地计数会错位），
+  // 直播消息没有该字段，从最后已知轮次递增。
   // 每个 assistant 气泡记下它所属的轮次，透传给工具卡片做变更面板定位。
   const roundOfMessage = new Map<string, number>()
   {
     let round = 0
     for (const msg of filtered) {
       if (msg.isSystem) continue
-      if (msg.role === 'user') { round++; continue }
+      if (msg.role === 'user') { round = msg.roundNumber ?? round + 1; continue }
       roundOfMessage.set(msg.id, round)
     }
   }
@@ -671,7 +673,8 @@ const lastUserMessage = computed(() =>
 )
 
 // 每轮回复末尾的「文件已更改」卡片：messageId → 轮次。
-// 轮次号 = 用户消息序号；卡片挂在每轮最后一条非系统 assistant 消息上。
+// 轮次号优先用后端带回的 round_number（分页加载时本地计数会错位），
+// 直播消息没有该字段，从最后已知轮次递增；卡片挂在每轮最后一条非系统 assistant 消息上。
 const roundFileCards = computed((): Record<string, { round: number }> => {
   const fc = useFileChangesStore()
   const map: Record<string, { round: number }> = {}
@@ -681,7 +684,7 @@ const roundFileCards = computed((): Record<string, { round: number }> => {
   for (const msg of messages.value) {
     if (msg.isSystem) continue
     if (msg.role === 'user') {
-      round++
+      round = msg.roundNumber ?? round + 1
       continue
     }
     if (msg.role === 'assistant') lastAiIdByRound[round] = msg.id

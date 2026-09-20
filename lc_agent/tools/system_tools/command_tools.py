@@ -178,12 +178,16 @@ def run_command(
         "Working directory for the command; defaults to the project root (project mode) or server working directory",
     ] = None,
 ) -> str:
-    """Execute a one-shot command and wait for it to finish; returns the full combined output. The process is force-killed on timeout.
+    """
+    You must first verify that your command is safe — never execute dangerous commands.
+    Generate commands according to the user’s operating system — do not execute Linux-syntax commands on Windows.
+    
+    Execute a one-shot command and wait for it to finish; returns the full combined output. The process is force-killed on timeout.
 
     Uses PowerShell (-NoProfile -Command) on Windows and $SHELL (default: /bin/sh) on Linux/macOS.
     WARNING (Windows PowerShell 5.1): '&&' is not supported. Chain dependent commands with 'cmd1; if ($?) { cmd2 }' instead.
 
-    Use for: ls, pip install, git status, build scripts, or any command that exits on its own.
+    Use for:  pip install, git status, build scripts, or any command that exits on its own.
     Do NOT use for: long-running servers (Flask, Celery, dev servers) — use start_background_process instead.
     """
     error = _validate_command(command)
@@ -449,7 +453,9 @@ def start_background_process(
         "Working directory for the command; defaults to the project root (project mode) or server working directory",
     ] = None,
 ) -> str:
-    """Start a long-running process in the background and return its PID with initial output.
+    """
+    Start a long-running process in the background and return its PID with initial output.
+    Generate commands according to the user’s operating system — do not execute Linux-syntax commands on Windows.
 
     Use for: Flask/Django/FastAPI servers, Celery workers, webpack dev servers, or any daemon that doesn't exit on its own.
     Do NOT use for: one-shot commands that exit by themselves — use run_command instead.

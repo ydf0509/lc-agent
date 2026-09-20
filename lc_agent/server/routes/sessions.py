@@ -163,6 +163,15 @@ async def get_session_messages(
     ui_messages = await msg_repo.list_by_session(session_id, limit=limit, offset=effective_offset)
 
     if ui_messages:
+        # 轮次号 = 该消息之前的 user 消息数（全局口径，与 FileChange.round_number 同源）。
+        # 前端只加载窗口消息，自己数会和后端错位，这里算好直接带回去。
+        round_of: dict[str, int] = {}
+        round_no = 0
+        for mid, mrole in await msg_repo.list_ids_roles(session_id):
+            if mrole == "user":
+                round_no += 1
+            round_of[mid] = round_no
+
         return {
             "total": total,
             "offset": effective_offset,
@@ -175,6 +184,7 @@ async def get_session_messages(
                     "tool_calls": msg.tool_calls or [],
                     "usage": msg.usage,
                     "http_traces_count": len(msg.http_traces) if msg.http_traces else 0,
+                    "round_number": round_of.get(msg.id),
                     "created_at": msg.created_at.isoformat(),
                 }
                 for msg in ui_messages

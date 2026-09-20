@@ -102,6 +102,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
   content: string | ContentBlock[]
   timestamp: number
+  /** 历史消息由后端带回的轮次号（之前的 user 消息数）；直播消息没有，本地递增 */
+  roundNumber?: number
   toolCalls?: ToolCall[]
   segments?: ContentSegment[]
   subAgents?: Record<string, SubAgentEntry>
@@ -370,6 +372,9 @@ function normalizeHistoryMessage(msg: any): ChatMessage | null {
     id: msg.id || createClientId(),
     role,
     content,
+    // 后端算好的轮次号（该消息之前的 user 消息数，全局口径）。
+    // 前端只加载窗口消息，本地计数会错位，历史消息一律优先用它。
+    roundNumber: typeof msg.round_number === 'number' ? msg.round_number : undefined,
     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
     subAgents: Object.keys(subAgents).length > 0 ? subAgents : undefined,
