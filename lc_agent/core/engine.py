@@ -29,6 +29,7 @@ from lc_agent.core.http_trace import (
 from lc_agent.core.http_trace_httpx import TracingAsyncClient
 from lc_agent.core.models import AgentPreset, ModelInfo
 from lc_agent.middlewares.inject_current_time_prompt_middleware import inject_current_time_prompt_middleware
+from lc_agent.middlewares.user_os_middleware import user_os_middleware
 from lc_agent.middlewares.system_prompt import SystemPromptMiddleware
 from lc_agent.prompts.subagent_prompts import GENERAL_PURPOSE_DESCRIPTION, SUBAGENT_DELEGATION_PROMPT, TASK_SYSTEM_PROMPT, TASK_TOOL_DESCRIPTION
 from lc_agent.prompts.todo_prompts import TODO_SYSTEM_PROMPT, TODO_TOOL_DESCRIPTION
@@ -429,7 +430,7 @@ class AgentEngine:
                     f"<project_rules>\n## Project Rules (AGENTS.md)\n\n{_agents_md}\n</project_rules>",
                     "ProjectAgentsMdMiddleware",
                 ))
-            # 2. Git status + OS context snapshot injection
+            # 2. Git status snapshot injection (OS info lives in <user_os>)
             # Use cached text pre-computed async in chat_stream; fall back to sync if missing.
             _ctx_text = self._project_ctx_text_cache.get(_effective_project_root) or _build_project_context_text(_effective_project_root)
             middleware.append(SystemPromptMiddleware(_ctx_text, "ProjectContextMiddleware"))
@@ -456,6 +457,7 @@ class AgentEngine:
             from lc_agent.middlewares import AskUserMiddleware
             middleware.append(AskUserMiddleware())
         middleware.append(inject_current_time_prompt_middleware)
+        middleware.append(user_os_middleware)
 
         # Only top-level agents need human-in-the-loop approval; sub-agents run autonomously
         if hasattr(self, '_permissions_service') and self._permissions_service and _depth == 0:

@@ -1,37 +1,13 @@
-"""Project context builder — git snapshot and OS info for the agent system prompt."""
+"""Project context builder — git snapshot for the agent system prompt."""
 
 
 def _build_project_context_text(project_root: str) -> str:
-    """Build a project context block with git snapshot and OS info.
+    """Build a project context block with git snapshot.
 
     Runs git commands synchronously (called once at agent build time).
+    OS info lives in the <user_os> block (see user_os_middleware), not here.
     """
-    import os
-    import platform
     import subprocess
-
-    os_name = platform.system()
-    # Mirror run_command's shell selection logic for consistency:
-    # Windows defaults to powershell; Linux/macOS reads $SHELL.
-    # Check config.jsonc's system_tools.command.default_shell first.
-    try:
-        from lc_agent.tools.system_tools._config import get_command_config
-        _cmd_cfg = get_command_config()
-        _configured_shell = _cmd_cfg.get("default_shell", "")
-    except Exception:
-        _configured_shell = ""
-    if _configured_shell:
-        shell = _configured_shell.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
-    elif os_name == "Windows":
-        shell = "powershell"
-    else:
-        shell = os.environ.get("SHELL", "bash").rsplit("/", 1)[-1]
-    try:
-        import platform as _pl
-        os_version = _pl.version() if os_name == "Linux" else _pl.release()
-        os_info = f"{os_name} {os_version} ({shell})"
-    except Exception:
-        os_info = f"{os_name} ({shell})"
 
     def _git(cmd: list[str]) -> str:
         try:
@@ -61,7 +37,6 @@ def _build_project_context_text(project_root: str) -> str:
         "<project_context>\n"
         "## Project Context\n\n"
         f"**Root**: {project_root}\n"
-        f"**OS**: {os_info}\n"
         f"{git_section}"
         "\n</project_context>"
     )
