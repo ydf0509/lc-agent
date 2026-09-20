@@ -8,7 +8,7 @@ from lc_agent.config.utils import DEFAULT_MAX_SUBAGENT_DEPTH, DEFAULT_RECURSION_
 class ModelConfig(BaseModel):
     model_id: str       # 前端用的全局唯一别名（标识/统计/显示用，从不进请求体）
     raw_model_id: str   # 渠道期望的真实模型名（请求一律发这个）兼定价兜底 + 统计归并用
-    context_limit: int = 8000  # maps to LangChain profile["max_input_tokens"]
+    context_limit: int = 200000  # maps to LangChain profile["max_input_tokens"]
     max_output_tokens: int = 65536
 
 

@@ -39,7 +39,7 @@
           >
             <el-icon class="panel-tab-icon"><component :is="tab.icon" /></el-icon>
             <span class="panel-tab-label">{{ tab.label }}</span>
-            <span v-if="tab.badge > 0" class="panel-tab-badge">{{ tab.badge }}</span>
+            <span v-if="tab.badge > 0" class="panel-tab-badge" :class="{ 'is-dirty': tab.id === 'editor' && dirtyFileCount > 0 }">{{ tab.badge }}</span>
           </button>
         </div>
       </div>
@@ -511,6 +511,8 @@ import { api, fetchApi } from '@/api/http'
 import { useChatStore } from '@/stores/chat'
 import { useAgentsStore } from '@/stores/agents'
 import { useAutomationStore } from '@/stores/automation'
+import { useFileChangesStore } from '@/stores/file-changes'
+import { useOpenedFilesStore } from '@/stores/opened-files'
 import { useMarkdownTheme, MARKDOWN_THEME_OPTIONS, type MarkdownThemeId } from '@/composables/useMarkdownTheme'
 import { useMarkdownLayout, MARKDOWN_LAYOUT_OPTIONS, type MarkdownLayoutId } from '@/composables/useMarkdownLayout'
 import { useInputAnimation, INPUT_ANIMATION_OPTIONS, type InputAnimationType } from '@/composables/useInputAnimation'
@@ -531,6 +533,8 @@ const uiStore = useUiStore()
 const chatStore = useChatStore()
 const agentsStore = useAgentsStore()
 const automationStore = useAutomationStore()
+const fileChangesStore = useFileChangesStore()
+const openedFilesStore = useOpenedFilesStore()
 const enabledAutomationTaskCount = computed(() => automationStore.tasks.filter(task => task.enabled).length)
 
 const activeTab = computed(() => uiStore.activeTab)
@@ -542,14 +546,19 @@ const mcpErrorCount = computed(() =>
   toolsStore.filteredMcp.filter(server => server.allowed && server.status === 'error').length,
 )
 
+// 文件 tab：已打开文件数；有未保存改动时徽标变色提醒
+const dirtyFileCount = computed(() =>
+  openedFilesStore.files.filter(f => openedFilesStore.contentOf(f.path)?.dirty).length,
+)
+
 const tabs = computed((): Array<{ id: RightPanelTab; label: string; icon: any; badge: number }> => {
   const list: Array<{ id: RightPanelTab; label: string; icon: any; badge: number }> = [
     { id: 'model', label: '模型', icon: Cpu, badge: 0 },
     { id: 'abilities', label: '能力', icon: Tools, badge: mcpErrorCount.value },
-    { id: 'changes', label: '变更', icon: Files, badge: 0 },
+    { id: 'changes', label: '变更', icon: Files, badge: fileChangesStore.fileCount },
   ]
   // 文件查看区：打开的文件以标签展示，内容在此查看
-  list.push({ id: 'editor', label: '文件', icon: FolderOpened, badge: 0 })
+  list.push({ id: 'editor', label: '文件', icon: FolderOpened, badge: openedFilesStore.files.length })
   list.push({ id: 'tasks', label: '任务', icon: Clock, badge: runningProcessCount.value })
   return list
 })
@@ -859,6 +868,11 @@ async function openDetail(mode: 'tool-group' | 'mcp' | 'skill', title: string, d
   line-height: 15px;
   text-align: center;
   box-shadow: 0 0 0 2px var(--el-bg-color);
+}
+
+/* 文件 tab 有未保存改动时：徽标改用橙色提醒，与「变更」默认红区分 */
+.panel-tab-badge.is-dirty {
+  background: var(--el-color-warning);
 }
 
 .right-panel-scroll {

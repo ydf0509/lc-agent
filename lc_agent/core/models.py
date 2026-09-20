@@ -14,7 +14,7 @@ class ModelInfo(BaseModel):
     raw_model_id: str   # 渠道期望的真实模型名（请求一律发这个）兼定价兜底 + 统计归并用
     provider: str
     base_url: str
-    context_limit: int = 8000
+    context_limit: int = 200000
     max_output_tokens: int = 0
     api_key: str = ""
 

@@ -57,7 +57,7 @@ def parse_models(config: dict) -> list[ModelInfo]:
             raw_model_id=model_conf["raw_model_id"],
             provider=provider_name,
             base_url=provider_conf.get("base_url", ""),
-            context_limit=model_conf.get("context_limit", 8000),
+            context_limit=model_conf.get("context_limit", 200000),
             max_output_tokens=model_conf.get("max_output_tokens", 0),
             api_key=provider_conf.get("api_key", ""),
         )

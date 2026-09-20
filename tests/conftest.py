@@ -24,7 +24,7 @@ def sample_config() -> dict:
             "default": {
                 "api_key": "test-key",
                 "base_url": "https://api.example.com/v1",
-                "models": [{"model_id": "test-model", "raw_model_id": "test-model", "context_limit": 8000}],
+                "models": [{"model_id": "test-model", "raw_model_id": "test-model"}],
             }
         },
         "agent": {

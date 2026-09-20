@@ -195,7 +195,7 @@ class TestAgentEngine:
         assert len(models) == 1
         assert models[0].model_id == "test-model"
         assert models[0].raw_model_id == "test-model"
-        assert models[0].context_limit == 8000
+        assert models[0].context_limit == 200000
 
     def test_get_default_preset(self, sample_config):
         from lc_agent.core.engine import AgentEngine
