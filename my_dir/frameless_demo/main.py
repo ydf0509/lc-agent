@@ -1,14 +1,97 @@
-"""Frameless pywebview demo: Vue 3 (CDN) + custom window-control buttons.
+"""Captionless (not frameless) pywebview demo: Vue 3 (CDN) + custom window buttons.
+
+Q1 整套验证：frameless=False 正常起窗（保留 WS_THICKFRAME，原生 resize 满血），
+等 shown 事件后用 ctypes 去掉 WS_CAPTION（只去标题栏，不碰左右下边框），
+再把 Form.MaximizedBounds 锁到当前屏工作区（最大化不盖任务栏）。
+
+Windows-only（用到 ctypes.windll + WinForms）。
 
 Usage:
     D:\\ProgramData\\Miniconda3\\envs\\py312\\python.exe D:\\codes\\lc-agent\\my_dir\\frameless_demo\\main.py
 
-Window is borderless (frameless=True). The title bar is custom HTML:
 - drag: title bar has class "pywebview-drag-region", easy_drag=False
 - buttons: minimize / maximize-restore / close, wired via pywebview.api
 """
 
+import ctypes
+import traceback
+from ctypes import wintypes
+
 import webview
+
+
+WS_CAPTION = 0x00C00000
+GWL_STYLE = -16
+SWP_NOMOVE = 0x0002
+SWP_NOSIZE = 0x0001
+SWP_NOZORDER = 0x0004
+SWP_FRAMECHANGED = 0x0020
+
+
+def _apply_captionless_fix(window):
+    """shown 回调：去 WS_CAPTION + 锁 MaximizedBounds=工作区（Q1 整套）。
+
+    时机：WinForms Shown 之后 -> hwnd 必已创建；只跑一次，窗口刚露面，看不到闪烁。
+    线程：pywebview 的 Event.set() 把回调跑在新起的事件线程里，
+    凡是碰 WinForms Form 的操作都经 native.Invoke(Action(...)) 送回 UI 线程执行。
+    """
+    native = window.native  # BrowserForm；shown 时必已由 BrowserForm.__init__ 赋值
+    if native is None:
+        print("[fix] native is None, skip patch")
+        return
+    print("[fix] shown fired, patching on UI thread...")
+
+    import clr
+
+    clr.AddReference("System.Windows.Forms")
+    clr.AddReference("System.Drawing")
+    import System.Windows.Forms as WinForms
+    from System import Action
+    from System.Drawing import Rectangle
+
+    # NOTE: 必须用独立的 WinDLL 实例，不能碰 ctypes.windll.user32。
+    # ctypes.windll.user32 是全局单例；一旦给它的 SetWindowPos 设了 argtypes，
+    # pywebview 自身 winforms.py 的 move() 传 None 宽高就会炸
+    # (ArgumentError: 'NoneType' cannot be interpreted as an integer)，
+    # 表现为标题栏拖拽失效。独立实例的 prototype 只影响本 demo。
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    # HWND 在 64 位下是 64 位，不声明 argtypes 会被 ctypes 按 32 位 int 截断 -> 必须声明
+    user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.GetWindowLongW.restype = wintypes.LONG
+    user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.LONG]
+    user32.SetWindowLongW.restype = wintypes.LONG
+    user32.SetWindowPos.argtypes = [
+        wintypes.HWND, wintypes.HWND,
+        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint,
+    ]
+    user32.SetWindowPos.restype = wintypes.BOOL
+
+    def _patch():
+        try:
+            form = window.native
+            hwnd = form.Handle.ToInt64()
+            before = user32.GetWindowLongW(hwnd, GWL_STYLE)
+            user32.SetWindowLongW(hwnd, GWL_STYLE, (before & ~WS_CAPTION) & 0xFFFFFFFF)
+            # 不移动、不改尺寸，只让 OS 重算非客户区（多余边框消失）
+            user32.SetWindowPos(
+                hwnd, None, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            )
+            after = user32.GetWindowLongW(hwnd, GWL_STYLE)
+            # 最大化锁进当前屏工作区：任务栏露出来
+            wa = WinForms.Screen.FromHandle(form.Handle).WorkingArea
+            form.MaximizedBounds = Rectangle(wa.X, wa.Y, wa.Width, wa.Height)
+            print(
+                f"[fix] style before=0x{before & 0xFFFFFFFF:08X} "
+                f"after=0x{after & 0xFFFFFFFF:08X} "
+                f"caption_removed={not (after & WS_CAPTION)}"
+            )
+            print(f"[fix] MaximizedBounds=({wa.X},{wa.Y},{wa.Width},{wa.Height})")
+        except Exception:
+            traceback.print_exc()
+
+    native.Invoke(Action(_patch))
+    print("[fix] patch done")
 
 
 MAIN_HTML = r"""<!DOCTYPE html>
@@ -173,16 +256,18 @@ class Api:
 def main():
     api = Api()
     window = webview.create_window(
-        "frameless-demo",
+        "captionless-demo",
         html=MAIN_HTML,
         width=900,
         height=640,
-        frameless=True,
+        frameless=False,  # 保持 WS_THICKFRAME：原生 resize 满血；标题栏稍后用 ctypes 去掉
         easy_drag=False,  # only the .pywebview-drag-region title bar drags
         text_select=True,
         js_api=api,
     )
     api._window = window
+    # shown 只 fire 一次（BrowserForm.Shown）：封口，走 _apply_captionless_fix
+    window.events.shown += lambda: _apply_captionless_fix(window)
     webview.start(debug=False)
 
 

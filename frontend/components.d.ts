@@ -22,6 +22,7 @@ declare module 'vue' {
     CodeEditor: typeof import('./src/components/panels/CodeEditor.vue')['default']
     ContextMeter: typeof import('./src/components/chat/ContextMeter.vue')['default']
     CopyRoundsButton: typeof import('./src/components/chat/CopyRoundsButton.vue')['default']
+    DesktopWindowControls: typeof import('./src/components/layout/DesktopWindowControls.vue')['default']
     DetailModal: typeof import('./src/components/panels/DetailModal.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElBadge: typeof import('element-plus/es')['ElBadge']

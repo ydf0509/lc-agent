@@ -36,12 +36,17 @@ class SubAgentRunTracker:
         subagent_display_map: dict[str, str],
         tool_calls: list[dict[str, Any]],
         existing_subsession_ids: set[str] | None = None,
+        usage_rounds: list[dict[str, Any]] | None = None,
     ) -> None:
         self.parent_thread_id = parent_thread_id
         self.user_id = user_id
         self.subagent_display_map = subagent_display_map
         self.tool_calls = tool_calls
         self.existing_subsession_ids = existing_subsession_ids or set()
+        # 流式过程的内存 usage 列表引用（主+子混排，role="sub" 打标）。
+        # done 时按 sub_session_id 摘出该子会话的 rounds，随子会话消息落库，
+        # 仅供子会话页展示 token；总量统计走 record_usage 全量落库，不受影响。
+        self._usage_rounds = usage_rounds if usage_rounds is not None else []
         self._runs: dict[str, _SubAgentRun] = {}
         self._tasks: list[asyncio.Task[Any]] = []
         self._run_persistence_tasks: dict[str, asyncio.Task[Any]] = {}
@@ -192,6 +197,18 @@ class SubAgentRunTracker:
                 tool_call["resultLength"] = len(result)
                 return
 
+    def _sub_usage_rounds(self, sub_session_id: str) -> list[dict[str, Any]]:
+        """摘出该子会话的 usage rounds（过滤摘要行），仅供子会话页展示 token。"""
+        from lc_agent.server.stream_utils import is_summarize_usage_row
+
+        return [
+            r
+            for r in self._usage_rounds
+            if r.get("role") == "sub"
+            and r.get("sub_session_id") == sub_session_id
+            and not is_summarize_usage_row(r)
+        ]
+
     def _handle_done(self, payload: dict[str, Any]) -> dict[str, Any]:
         tool_call_id = payload["tool_call_id"]
         run = self._runs.pop(tool_call_id, None)
@@ -201,12 +218,22 @@ class SubAgentRunTracker:
         content = self._build_content(run)
         traces = pop_subagent_traces(run.sub_session_id) or None
         run.http_traces = traces
+        sub_rounds = self._sub_usage_rounds(run.sub_session_id)
+        sub_usage = (
+            {
+                "rounds": sub_rounds,
+                "tool_call_count": len(run.inner_tool_calls),
+            }
+            if sub_rounds
+            else None
+        )
         self._enqueue_persistence(
             tool_call_id,
             lambda: persistence.finalize_subsession_message(
                 run.sub_session_id,
                 content,
                 tool_calls=run.inner_tool_calls or None,
+                usage=sub_usage,
                 http_traces=traces,
             ),
         )
@@ -221,6 +248,8 @@ class SubAgentRunTracker:
         }
         if traces:
             done_payload["http_traces"] = traces
+        if sub_usage:
+            done_payload["usage"] = sub_usage
         return done_payload
 
     def _handle_summarization(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:

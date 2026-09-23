@@ -395,6 +395,7 @@ async def _send_stream(thread_id: str, req: RunStreamRequest, request: Request):
                 user_id=user.id if user else "",
                 subagent_display_map=subagent_display_map,
                 tool_calls=tool_calls,
+                usage_rounds=usage_rounds,
             )
 
             # Initialize sub-agent HTTP trace collector registry for this stream
@@ -724,6 +725,7 @@ async def _resume_stream(thread_id: str, req: RunStreamRequest, request: Request
                 subagent_display_map=subagent_display_map,
                 tool_calls=tool_calls,
                 existing_subsession_ids=_extract_existing_subsession_ids(tool_calls),
+                usage_rounds=usage_rounds,
             )
             from langgraph.types import Command
 

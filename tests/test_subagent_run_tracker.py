@@ -164,8 +164,8 @@ async def test_tracker_start_token_done_persists_subsession(monkeypatch):
     async def fake_delegation(sub_session_id, query):
         calls.append(("delegation", sub_session_id, query))
 
-    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None):
-        calls.append(("finalize", sub_session_id, content, tool_calls, http_traces))
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
+        calls.append(("finalize", sub_session_id, content, tool_calls, http_traces, usage))
 
     monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_create_subsession)
     monkeypatch.setattr(subagent_tracker.persistence, "save_subsession_delegation_message", fake_delegation)
@@ -237,6 +237,7 @@ async def test_tracker_start_token_done_persists_subsession(monkeypatch):
         "hello world",
         None,
         [{"id": "trace1"}],
+        None,
     )
 
 
@@ -260,7 +261,7 @@ async def test_tracker_persists_each_run_in_create_delegation_finalize_order(mon
     async def fake_delegation(sub_session_id, query):
         calls.append(("delegation", sub_session_id))
 
-    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None):
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
         calls.append(("finalize", sub_session_id))
 
     monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_create_subsession)
@@ -304,7 +305,7 @@ async def test_tracker_records_thinking_and_internal_tools(monkeypatch):
     async def fake_noop(*args, **kwargs):
         return None
 
-    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None):
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
         finalized.append((content, tool_calls, http_traces))
 
     monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_noop)
@@ -348,7 +349,7 @@ async def test_tracker_preserves_token_tool_token_order(monkeypatch):
     async def fake_noop(*args, **kwargs):
         return None
 
-    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None):
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
         finalized.append((content, tool_calls, http_traces))
 
     monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_noop)
@@ -376,6 +377,53 @@ async def test_tracker_preserves_token_tool_token_order(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_tracker_done_attaches_sub_usage_rounds(monkeypatch):
+    """done 时按 sub_session_id 摘出该子会话 rounds，随 usage 落库并附带在事件里。
+
+    只供子会话页展示 token；主会话总量统计走 record_usage 全量，不受影响。
+    """
+    from lc_agent.server.subagent_tracker import SubAgentRunTracker
+    from lc_agent.server import subagent_tracker
+
+    finalized = []
+
+    async def fake_noop(*args, **kwargs):
+        return None
+
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
+        finalized.append(usage)
+
+    monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_noop)
+    monkeypatch.setattr(subagent_tracker.persistence, "save_subsession_delegation_message", fake_noop)
+    monkeypatch.setattr(subagent_tracker.persistence, "finalize_subsession_message", fake_finalize)
+    monkeypatch.setattr(subagent_tracker, "pop_subagent_traces", lambda sub_session_id: None)
+
+    usage_rounds = [
+        {"role": "main", "sub_session_id": "", "input_tokens": 10},
+        {"role": "sub", "sub_session_id": "parent1--sa--task123", "input_tokens": 100,
+         "output_tokens": 20, "total_tokens": 120},
+        {"role": "sub", "sub_session_id": "parent1--sa--other", "input_tokens": 5},
+        {"role": "sub", "sub_session_id": "parent1--sa--task123", "input_tokens": 50,
+         "source": "summarize"},
+    ]
+    tracker = SubAgentRunTracker(
+        parent_thread_id="parent1",
+        user_id="",
+        subagent_display_map={},
+        tool_calls=[],
+        usage_rounds=usage_rounds,
+    )
+    tracker.handle_event("subagent_start", {"name": "r", "tool_call_id": "task123", "query": "q"})
+    _, done_payload = tracker.handle_event("subagent_done", {"tool_call_id": "task123", "status": "done"})
+
+    # 只摘出本子会话的非摘要 rounds；主 rounds 和别的子会话、摘要行都不混入
+    assert done_payload["usage"]["rounds"] == [usage_rounds[1]]
+    assert done_payload["usage"]["tool_call_count"] == 0
+    await tracker.drain()
+    assert finalized == [done_payload["usage"]]
+
+
+@pytest.mark.asyncio
 async def test_tracker_finalize_open_runs_marks_error(monkeypatch):
     from lc_agent.server.subagent_tracker import SubAgentRunTracker
     from lc_agent.server import subagent_tracker
@@ -385,7 +433,7 @@ async def test_tracker_finalize_open_runs_marks_error(monkeypatch):
     async def fake_noop(*args, **kwargs):
         return None
 
-    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None):
+    async def fake_finalize(sub_session_id, content, tool_calls=None, http_traces=None, usage=None):
         finalized.append((sub_session_id, content, tool_calls, http_traces))
 
     monkeypatch.setattr(subagent_tracker.persistence, "create_subsession", fake_noop)

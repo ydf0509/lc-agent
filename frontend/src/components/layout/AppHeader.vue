@@ -1,6 +1,16 @@
 <template>
+  <!-- 桌面无标题栏模式：header 自身不当拖拽区（否则内部按钮/选择器点不中），
+       拖拽手柄只有两段：logo 块 + 中央空白 spacer。
+       双击任一段切换最大化/还原。 -->
   <header class="app-header">
     <div class="header-left">
+      <!-- 左拖拽手柄：只包 logo，不包移动端按钮 -->
+      <span
+        v-if="showDesktopChrome"
+        class="desktop-drag-block pywebview-drag-region"
+        @dblclick="desktop.toggleMax()"
+      ><span class="logo desktop-logo">⚡ {{ appName }}</span></span>
+      <span v-if="!showDesktopChrome" class="logo">⚡ {{ appName }}</span>
       <el-button
         class="mobile-sidebar-btn"
         :icon="Menu"
@@ -9,7 +19,6 @@
         aria-label="打开会话列表"
         @click="$emit('openMobileSidebar')"
       />
-      <span class="logo">⚡ {{ appName }}</span>
     </div>
     <div class="header-center">
       <div class="agent-select-wrapper">
@@ -40,6 +49,12 @@
         </el-option>
       </el-select>
       </div>
+      <!-- 中央空白拖拽手柄：桌面无标题栏模式才出现，双击切换最大化 -->
+      <span
+        v-if="showDesktopChrome"
+        class="desktop-drag-spacer pywebview-drag-region"
+        @dblclick="desktop.toggleMax()"
+      />
       <div class="header-actions desktop-only">
         <FileChangesBadge />
         <button class="header-btn btn-manage-agents" @click="$emit('manageAgents')">⚙ Agents管理</button>
@@ -90,6 +105,7 @@
       <span v-else class="model-badge">{{ modelName }}</span>
       <el-button :icon="RefreshRight" circle size="small" title="刷新页面" @click="reloadPage" />
       <el-button :icon="isDark ? Sunny : Moon" circle size="small" @click="toggleDark()" />
+      <DesktopWindowControls />
     </div>
   </header>
 </template>
@@ -104,6 +120,47 @@ import { getAgentIcon } from '@/utils/agentIcon'
 import { Sunny, Moon, Menu, Setting, RefreshRight, Plus, Briefcase } from '@element-plus/icons-vue'
 import CopyRoundsButton from '@/components/chat/CopyRoundsButton.vue'
 import FileChangesBadge from '@/components/chat/FileChangesBadge.vue'
+import DesktopWindowControls from '@/components/layout/DesktopWindowControls.vue'
+import { useDesktopMode } from '@/stores/desktop'
+
+const desktop = useDesktopMode()
+
+// 桌面无标题栏模式才启用拖拽手柄 + 自绘三按钮；浏览器完全不受影响
+const showDesktopChrome = computed(() => desktop.isDesktop && desktop.isFrameless)
+
+function onPywebviewReady() {
+  desktop.markBridgeReady()
+}
+
+if (typeof window !== 'undefined') {
+  // 就绪判定不用事件、用“api 里有没有真实方法”做轮询确认，原因：
+  // 1. pywebviewready 是 CustomEvent，不排队不重放——Vue setup 执行晚了就永远错过；
+  // 2. window.pywebview 对象先被注入时 api 只是空对象 {}（truthy），方法稍后才挂上，
+  //    同步探测 pv?.api 会误判就绪。所以必须确认 typeof minimize === 'function'。
+  // 事件只做加速信号，最终以轮询为准；浏览器 ?desktop=1 预览下轮询永不命中，
+  // 按钮保持禁用（符合预期）。
+  const hasRealApi = () => {
+    const pv = (window as unknown as { pywebview?: { api?: Record<string, unknown> } }).pywebview
+    return typeof pv?.api?.minimize === 'function'
+  }
+  if (hasRealApi()) {
+    onPywebviewReady()
+  } else {
+    window.addEventListener('pywebviewready', onPywebviewReady, { once: true })
+    const timer = window.setInterval(() => {
+      if (hasRealApi()) {
+        window.clearInterval(timer)
+        window.removeEventListener('pywebviewready', onPywebviewReady)
+        onPywebviewReady()
+      }
+    }, 200)
+    // 10s 还没 api 说明是浏览器预览，保持按钮禁用并停掉轮询
+    window.setTimeout(() => {
+      window.clearInterval(timer)
+      window.removeEventListener('pywebviewready', onPywebviewReady)
+    }, 10000)
+  }
+}
 
 const agentsStore = useAgentsStore()
 const chatStore = useChatStore()
@@ -152,12 +209,40 @@ const emit = defineEmits<{
   font-size: 16px;
   font-weight: 700;
   color: var(--el-color-primary);
+  flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 桌面无标题栏模式：只有带 .pywebview-drag-region 的节点才参与窗口拖拽。
+   pywebview 注入的 customize.js 在 body mousedown 时实时 querySelectorAll，
+   所以 Vue 动态渲染的节点同样生效（6.x 事件委托，已验证）。
+   拖拽类只加在三段手柄上（logo 块 / 左 spacer 已并入 logo 块 / 中央 spacer），
+   header 自身、按钮、选择器一律不加，否则 drag 会吞掉点击
+   （DRAG_REGION_DIRECT_TARGET_ONLY 默认为 False，子节点点击也会触发拖拽）。 */
+.desktop-drag-block,
+.desktop-drag-spacer {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.desktop-drag-block {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding-right: 8px;
+  cursor: default;
+}
+.desktop-drag-spacer {
+  display: inline-block;
+  width: 72px;
+  min-width: 24px;
+  flex: 0 1 160px;
+  align-self: stretch;
+  cursor: default;
 }
 
 .header-center {
@@ -511,6 +596,14 @@ const emit = defineEmits<{
 }
 
 @media (max-width: 900px) {
+  /* 桌面无标题栏模式下移动端布局不启用（窗口最小 800x600 且应横屏使用）；
+     拖拽手柄/三按钮在窄屏下隐藏，避免挤占。 */
+  .desktop-drag-block,
+  .desktop-drag-spacer,
+  .desktop-window-controls {
+    display: none;
+  }
+
   /* Show Agents管理 icon button on mobile */
   .mobile-agents-btn {
     display: flex;
