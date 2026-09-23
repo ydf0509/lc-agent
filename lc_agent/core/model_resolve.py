@@ -12,12 +12,13 @@ def parse_models(config: dict) -> list[ModelInfo]:
     """从配置解析 ModelInfo 列表。
 
     Fail fast: collect ALL problems (missing model_id/raw_model_id, duplicate
-    ids) and raise once with the full list, instead of failing one at a time.
+    model_id) and raise once with the full list, instead of failing one at a time.
+    允许同一 provider 下多个 model_id 指向同一 raw_model_id（例如同一底层模型
+    用不同 context_limit 暴露多个入口）。
     """
     problems: list[str] = []
     parsed: list[tuple[str, dict, dict]] = []  # (provider_name, provider_conf, model_conf)
     seen_model_ids: dict[str, str] = {}        # model_id -> provider（全局唯一，跨 provider 也算）
-    seen_raw: dict[tuple[str, str], str] = {}  # (provider, raw_model_id) -> model_id
     for provider_name, provider_conf in config.get("provider", {}).items():
         if not isinstance(provider_conf, dict):
             continue
@@ -36,16 +37,6 @@ def parse_models(config: dict) -> list[ModelInfo]:
                     )
                 else:
                     seen_model_ids[model_id] = provider_name
-            if raw_model_id:
-                key = (provider_name, raw_model_id)
-                if key in seen_raw:
-                    problems.append(
-                        f"(provider, raw_model_id) 重复：({provider_name}, {raw_model_id!r}) 同时被 "
-                        f"model_id={seen_raw[key]} 和 model_id={model_id} 使用；"
-                        "同一渠道同一底层模型只允许一个入口，路由/故障转移请在渠道侧（litellm）配置"
-                    )
-                else:
-                    seen_raw[key] = model_id
             parsed.append((provider_name, provider_conf, model_conf))
     if problems:
         raise ValueError(

@@ -10,6 +10,7 @@ dependencies = [
     "langgraph>=0.4",
     "langchain-openai",
     "langchain-deepseek",
+    "tiktoken",
     "fastapi>=0.115",
     "uvicorn[standard]",
     "sqlmodel>=0.0.22",

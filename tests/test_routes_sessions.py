@@ -38,6 +38,60 @@ async def app_and_headers(setup):
 
 
 @pytest.mark.asyncio
+async def test_manual_compaction_rewrites_checkpoint(app_and_headers):
+    """手动压缩：重写 checkpoint 线程（摘要+保留尾部），业务库不受影响；keep 覆盖参数生效。"""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    app, headers = app_and_headers
+    app.engine._checkpointer = InMemorySaver()
+
+    transport = ASGITransport(app=app.fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/sessions", json={"title": "C", "model": "gpt-4"}, headers=headers
+        )
+        session_id = create_resp.json()["id"]
+
+        agent = app.engine._get_or_build_agent("chat", "gpt-4")
+        config = {"configurable": {"thread_id": session_id}}
+        msgs = []
+        for i in range(6):
+            msgs.append(HumanMessage(content=f"question {i}"))
+            msgs.append(AIMessage(content=f"answer {i}"))
+        await agent.aupdate_state(config, {"messages": msgs})
+
+        # keep="2" → 只留最近 2 条 checkpoint 消息，其余 10 条进摘要
+        resp = await client.post(
+            f"/api/sessions/{session_id}/compact", json={"keep": "2"}, headers=headers
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["compacted"] is True
+        assert data["summarized_count"] == 10
+        assert data["kept_count"] == 2
+        assert data["kept_user_count"] == 1
+        # 压缩前后 checkpoint 估算（水位条“预估·待更新”用）：压缩后必须小于压缩前
+        before = data["checkpoint_tokens_before"]
+        after = data["checkpoint_tokens_after"]
+        assert isinstance(before, int) and isinstance(after, int)
+        assert 0 < after < before
+
+        state = await agent.aget_state(config)
+        new_msgs = state.values["messages"]
+        assert len(new_msgs) == 3  # 摘要 + question 5 + answer 5
+        assert "summary" in str(new_msgs[0].content).lower()
+        assert new_msgs[1].content == "question 5"
+        assert new_msgs[2].content == "answer 5"
+
+        # 不带 keep（走配置默认 fraction）时消息量在保留范围内 → 409 无需压缩
+        resp = await client.post(
+            f"/api/sessions/{session_id}/compact", json={}, headers=headers
+        )
+        assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_create_and_list_sessions(app_and_headers):
     app, headers = app_and_headers
     transport = ASGITransport(app=app.fastapi_app)

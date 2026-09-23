@@ -75,9 +75,17 @@
         // 子Agent最大嵌套深度，0 表示禁用子Agent
         "max_subagent_depth": 2,
 
+        // ----- 模型调用重试（SDK 层） -----
+        // 模型请求失败（429 / 5xx / 超时 / 连接错误）时由 openai SDK 自动重试的次数，默认 2。
+        // 只对"响应开始前"的失败生效；流式吐字中途断流不会重试。范围 0-10，非法值回落默认
+        "model_retry": {
+            "max_retries": 3
+        },
+
         // ----- 上下文摘要（自动压缩对话历史） -----
         // 当对话超过 trigger 阈值时，自动用 LLM 生成旧消息的摘要，
         // 保留最近 keep 范围的消息原文，避免上下文溢出。
+        // 阈值与保留量都按 tiktoken(cl100k_base) 真实编码统计，不用"字符数/4"的近似估算
         //用户需要懂 from langchain.agents.middleware.summarization import SummarizationMiddleware
         "summarization": {
             // 是否启用自动摘要，默认 true

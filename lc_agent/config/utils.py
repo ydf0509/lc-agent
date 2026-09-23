@@ -12,6 +12,9 @@ DEFAULT_MCP_TOOL_TIMEOUT = 300
 DEFAULT_RECURSION_LIMIT = 9999
 # 子 Agent 最大嵌套深度（0 表示禁用子 Agent），对应配置键 agent.max_subagent_depth
 DEFAULT_MAX_SUBAGENT_DEPTH = 2
+# 模型调用重试次数（openai SDK 层内置重试，只覆盖 429/5xx/超时/连接错误这类
+# "响应开始前"的失败；流式吐字中途断流不会重试），对应配置键 agent.model_retry.max_retries
+DEFAULT_MODEL_MAX_RETRIES = 3
 
 # set_config_path 注册配置路径所用的环境变量名
 ENV_CONFIG_PATH = "LC_AGENT_CONFIG_PATH"

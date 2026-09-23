@@ -20,6 +20,7 @@ declare module 'vue' {
     CleanupDialog: typeof import('./src/components/dialogs/CleanupDialog.vue')['default']
     CodeBlockModal: typeof import('./src/components/chat/CodeBlockModal.vue')['default']
     CodeEditor: typeof import('./src/components/panels/CodeEditor.vue')['default']
+    ContextMeter: typeof import('./src/components/chat/ContextMeter.vue')['default']
     CopyRoundsButton: typeof import('./src/components/chat/CopyRoundsButton.vue')['default']
     DetailModal: typeof import('./src/components/panels/DetailModal.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']

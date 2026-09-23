@@ -58,7 +58,7 @@
         @mousedown.prevent
       >
         <div class="skill-picker-header">
-          <span>Skills</span>
+          <span>Skills / 命令</span>
           <span class="skill-picker-query">/{{ skillQuery }}</span>
         </div>
         <button
@@ -76,8 +76,9 @@
             <span class="skill-picker-name">/{{ skill.name }}</span>
             <span class="skill-picker-description">{{ getSkillDescription(skill.description) }}</span>
           </span>
-          <span v-if="skill.scope === 'project'" class="skill-picker-scope">项目</span>
-          <span v-else-if="skill.scope === 'extra'" class="skill-picker-scope">额外</span>
+          <span v-if="isBuiltin(skill)" class="skill-picker-scope">命令</span>
+          <span v-else-if="(skill as SkillSuggestion).scope === 'project'" class="skill-picker-scope">项目</span>
+          <span v-else-if="(skill as SkillSuggestion).scope === 'extra'" class="skill-picker-scope">额外</span>
         </button>
         <div v-if="skillSuggestions.length === 0" class="skill-picker-empty">没有匹配的 Skill</div>
       </div>
@@ -147,6 +148,7 @@
         >
           发送
         </button>
+        <ContextMeter ref="contextOrbRef" @compact="forwardCompact" />
       </div>
     </div>
   </div>
@@ -164,6 +166,7 @@ import { useSessionsStore } from '@/stores/sessions'
 import { useChatUiStateStore } from '@/stores/chat-ui-state'
 import { useSessionTabsStore } from '@/stores/session-tabs'
 import { useInputAnimation } from '@/composables/useInputAnimation'
+import ContextMeter from '@/components/chat/ContextMeter.vue'
 import {
   type Attachment,
   type ContentBlock,
@@ -185,6 +188,7 @@ const emit = defineEmits<{
   send: [content: ContentBlock[]]
   stop: []
   cancelEdit: []
+  compact: [arg: string]
 }>()
 
 const chatStore = useChatStore()
@@ -195,6 +199,11 @@ const { inputAnimation } = useInputAnimation()
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const messageText = ref('')
+const contextOrbRef = ref<InstanceType<typeof ContextMeter> | null>(null)
+
+function forwardCompact(arg: string) {
+  emit('compact', arg)
+}
 const attachments = ref<Attachment[]>([])
 const skillMenuOpen = ref(false)
 const skillPickerRef = ref<HTMLElement | null>(null)
@@ -203,6 +212,21 @@ const activeSkillIndex = ref(0)
 
 type SkillSuggestion = Skill & { allowed?: boolean }
 
+/** 内置命令（本地拦截，不发给模型） */
+interface BuiltinCommand {
+  builtin: true
+  name: string
+  description: string
+}
+
+const BUILTIN_COMMANDS: BuiltinCommand[] = [
+  { builtin: true, name: 'compact', description: '压缩上下文：/compact [N|all]，N=保留最近 N 轮' },
+]
+
+function isBuiltin(item: SkillSuggestion | BuiltinCommand): boolean {
+  return 'builtin' in item && item.builtin === true
+}
+
 const availableSkills = computed<SkillSuggestion[]>(() => {
   if (agentsStore.isCodeAgent) return []
   return toolsStore.filteredSkills.filter((skill: SkillSuggestion) =>
@@ -210,10 +234,13 @@ const availableSkills = computed<SkillSuggestion[]>(() => {
   )
 })
 
-const skillSuggestions = computed(() => {
+const skillSuggestions = computed<(SkillSuggestion | BuiltinCommand)[]>(() => {
   const query = skillQuery.value.trim().toLocaleLowerCase()
-  if (!query) return availableSkills.value
-  return availableSkills.value
+  const builtin = BUILTIN_COMMANDS.filter((cmd) => {
+    if (!query) return true
+    return cmd.name.includes(query) || cmd.description.toLocaleLowerCase().includes(query)
+  })
+  const skills = availableSkills.value
     .filter((skill) => {
       const name = skill.name.toLocaleLowerCase()
       const description = skill.description.toLocaleLowerCase()
@@ -224,6 +251,7 @@ const skillSuggestions = computed(() => {
       const bStarts = b.name.toLocaleLowerCase().startsWith(query)
       return Number(bStarts) - Number(aStarts)
     })
+  return [...builtin, ...skills]
 })
 
 const isStreamingState = computed(() => props.isStreaming ?? isStreaming.value)
@@ -408,12 +436,12 @@ function scrollActiveSkillIntoView() {
   })
 }
 
-function selectSkill(skill: SkillSuggestion) {
+function selectSkill(item: SkillSuggestion | BuiltinCommand) {
   const textarea = textareaRef.value
   const trigger = getSkillTrigger()
   if (!textarea || !trigger) return
 
-  const replacement = `/${skill.name} `
+  const replacement = `/${item.name} `
   messageText.value = `${messageText.value.slice(0, trigger.start)}${replacement}${messageText.value.slice(trigger.end)}`
   closeSkillMenu()
   nextTick(() => {
@@ -524,6 +552,15 @@ function removeAttachment(id: string) {
 
 function handleSubmit() {
   if (isStreamingState.value) return
+  // 内置命令本地拦截，不发给模型
+  const text = messageText.value.trim()
+  const compactMatch = /^\/compact(?:\s+(\S.*))?$/.exec(text)
+  if (compactMatch && attachments.value.length === 0) {
+    closeSkillMenu()
+    clearInput()
+    emit('compact', (compactMatch[1] || '').trim())
+    return
+  }
   const blocks = buildContentBlocks(messageText.value, attachments.value)
   if (blocks.length === 0) return
   closeSkillMenu()
@@ -534,6 +571,12 @@ function handleSubmit() {
 function handleStop() {
   emit('stop')
 }
+
+defineExpose({
+  setCompacting(v: boolean) {
+    contextOrbRef.value?.setCompacting(v)
+  },
+})
 
 function handleCancelEdit() {
   clearInput()

@@ -23,6 +23,10 @@ class SessionUpdateRequest(BaseModel):
     is_pinned: bool | None = None
 
 
+class CompactRequest(BaseModel):
+    keep: str = ""  # ""=沿用配置 keep；"all"=只留 1 条；数字=留最近 N 条
+
+
 def serialize_session(s):
     return {
         "id": s.id,
@@ -130,6 +134,44 @@ async def delete_session(
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
     return Response(status_code=204)
+
+
+@router.post("/sessions/{session_id}/compact")
+async def compact_session(
+    session_id: str,
+    body: CompactRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """手动压缩上下文（不看触发阈值）：只重写模型上下文，聊天记录不动。"""
+    repo = SessionRepository(db)
+    sess = await repo.get_by_id(session_id)
+    if sess is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    _check_session_access(sess, user)
+
+    engine = request.app.state.engine
+    try:
+        result = await engine.compact_thread(
+            session_id, preset_id=sess.agent_id, model_id=sess.model, keep_override=body.keep,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        server_logger.exception("Manual compaction failed for session %s", session_id)
+        raise HTTPException(status_code=503, detail="压缩失败，请稍后重试") from e
+
+    if not result.get("compacted"):
+        reasons = {
+            "empty": "会话还没有消息",
+            "nothing_to_compact": "消息量在保留范围内，无需压缩",
+            "agent_not_found": "Agent 不可用",
+        }
+        raise HTTPException(
+            status_code=409, detail=reasons.get(result.get("reason", ""), "无需压缩")
+        )
+    return result
 
 
 @router.get("/sessions/{session_id}/messages")

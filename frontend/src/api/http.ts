@@ -118,6 +118,21 @@ export const api = {
 
   getModels: () => fetchApi<{ model_id: string; raw_model_id: string; provider: string; base_url: string; context_limit: number }[]>('/models'),
 
+  // 手动压缩上下文（/compact）：keep 为空串=沿用配置；"all"=只留 1 条；数字=留最近 N 条
+  // checkpoint_tokens_* 是 checkpoint 历史的估算值（不含 system/tools），仅供水位条压缩后做“预估·待更新”展示
+  compactSession: (sessionId: string, keep?: string) =>
+    fetchApi<{
+      compacted: true
+      summarized_count: number
+      kept_count: number
+      kept_user_count: number
+      checkpoint_tokens_before: number | null
+      checkpoint_tokens_after: number | null
+    }>(
+      `/sessions/${sessionId}/compact`,
+      { method: 'POST', body: JSON.stringify({ keep: keep ?? '' }) },
+    ),
+
   getMcpServers: () => fetchApi<any[]>('/mcp'),
   refreshMcpServers: () => fetchApi<any[]>('/mcp/refresh', { method: 'POST' }),
   refreshMcpServer: (name: string) => fetchApi<any>(`/mcp/${name}/refresh`, { method: 'POST' }),
