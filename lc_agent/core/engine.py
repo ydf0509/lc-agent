@@ -341,34 +341,31 @@ class AgentEngine:
         if preset.project_mode and preset.project_root:
             from pathlib import Path as _PRoot
             _effective_project_root = str(_PRoot(preset.project_root).expanduser().resolve())
-        if _depth == 0 and hasattr(self, '_skills_toolkit') and self._skills_toolkit:
-            loader = getattr(self._skills_toolkit, '_resolved_loader', None)
-            if loader and hasattr(loader, 'set_project_overlay'):
-                # Overlay = project skills dir (project_mode) + per-preset extra skill dirs.
-                # extra_skill_dirs works independently of project_mode.
-                _overlay_dirs: list[str] = []
-                if _effective_project_root:
-                    from pathlib import Path as _Path
-                    _overlay_dirs.append(str(_Path(_effective_project_root) / ".agents" / "skills"))
-                for _d in (preset.extra_skill_dirs or []):
-                    if isinstance(_d, str) and _d.strip():
-                        _overlay_dirs.append(_d.strip())
-                loader.set_project_overlay(_overlay_dirs or None)
+        if _depth == 0 and getattr(self, '_skills_loader', None):
+            loader = self._skills_loader
+            # Overlay = project skills dir (project_mode) + per-preset extra skill dirs.
+            # extra_skill_dirs works independently of project_mode.
+            _overlay_dirs: list[str] = []
+            if _effective_project_root:
+                from pathlib import Path as _Path
+                _overlay_dirs.append(str(_Path(_effective_project_root) / ".agents" / "skills"))
+            for _d in (preset.extra_skill_dirs or []):
+                if isinstance(_d, str) and _d.strip():
+                    _overlay_dirs.append(_d.strip())
+            loader.set_project_overlay(_overlay_dirs or None)
 
         _memory_middleware: SystemPromptMiddleware | None = None
         _skills_middleware: _LcAgentSkillMiddleware | None = None
-        if hasattr(self, '_skills_toolkit') and self._skills_toolkit:
+        if getattr(self, '_skills_loader', None):
             allowed = preset.allowed_skills
             if allowed is None or allowed:
-                loader = self._skills_toolkit._resolved_loader
-                if loader:
-                    _candidate = _LcAgentSkillMiddleware(
-                        loader,
-                        allowed_skills=allowed,
-                        executor=self._skills_toolkit._executor,
-                    )
-                    if _candidate.has_visible_skills:
-                        _skills_middleware = _candidate
+                _candidate = _LcAgentSkillMiddleware(
+                    self._skills_loader,
+                    allowed_skills=allowed,
+                    executor=getattr(self, '_skills_executor', None),
+                )
+                if _candidate.has_visible_skills:
+                    _skills_middleware = _candidate
 
         if hasattr(self, '_mcp_manager') and self._mcp_manager:
             mcp_tools = self._mcp_manager.get_filtered_langchain_tools(preset.allowed_mcp_servers)

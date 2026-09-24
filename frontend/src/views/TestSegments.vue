@@ -114,9 +114,9 @@ const samples: { label: string; toolCall: ToolCall; collapsed?: boolean }[] = [
     }),
   },
   {
-    label: '8. load_skill（展开区显示原始工具名 + 入参）',
+    label: '8. skill__load_skill（展开区显示原始工具名 + 入参）',
     toolCall: done({
-      name: 'load_skill',
+      name: 'skill__load_skill',
       args: { skill_name: 'anysearch' },
       result: '## Overview\nAnySearch is a unified real-time search service supporting general web search, vertical domain search, parallel fetching and structured extraction.\n\n## When to use\n- The user asks for current facts that need the open web.\n',
     }),

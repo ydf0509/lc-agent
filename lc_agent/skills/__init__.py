@@ -1,3 +1,1 @@
-from lc_agent.skills.scanner import SkillInfo, SkillScanner
-
-__all__ = ["SkillInfo", "SkillScanner"]
+"""Skill loader and middleware integration for lc-agent."""

@@ -119,6 +119,76 @@ def test_convert_stream_event_ignores_irrelevant():
     assert results == []
 
 
+def test_convert_stream_event_interrupt_pause_is_waiting_user():
+    """ask_user's interrupt() must render as waiting_user, not as a tool error."""
+    from langgraph.errors import GraphInterrupt
+    from langgraph.types import Interrupt
+
+    pause = GraphInterrupt([Interrupt(value={"type": "ask_user"})])
+    event = {
+        "event": "on_tool_error",
+        "name": "ask_user",
+        "run_id": "transient-run-id",
+        "metadata": {"langgraph_checkpoint_ns": "tools:stable-task-id"},
+        "data": {"error": pause, "input": {"questions": []}},
+    }
+    results = convert_stream_event(event)
+
+    assert len(results) == 1
+    etype, data = results[0]
+    assert etype == "tool_result"
+    assert data["tool_call_id"] == "stable-task-id"
+    assert data["status"] == "waiting_user"
+    assert data["is_error"] is False
+    assert data["result"] == ""
+
+
+def test_convert_stream_event_real_tool_error_stays_error():
+    """A genuine tool exception must still be reported as an error."""
+    event = {
+        "event": "on_tool_error",
+        "name": "search",
+        "run_id": "run-1",
+        "metadata": {"langgraph_checkpoint_ns": "tools:stable-task-id"},
+        "data": {"error": RuntimeError("boom"), "input": {"q": "test"}},
+    }
+    results = convert_stream_event(event)
+
+    assert len(results) == 1
+    etype, data = results[0]
+    assert etype == "tool_result"
+    assert data["status"] == "error"
+    assert data["is_error"] is True
+    assert "boom" in data["result"]
+
+
+def test_accumulate_display_state_interrupt_pause_sets_waiting_user():
+    """Accumulator must not stamp the ask_user card as error on interrupt."""
+    from langgraph.errors import GraphInterrupt
+    from langgraph.types import Interrupt
+
+    tools: list[dict] = [
+        {"name": "ask_user", "runId": "stable-task-id", "status": "running", "startTime": 1}
+    ]
+    event = {
+        "event": "on_tool_error",
+        "name": "ask_user",
+        "run_id": "transient-run-id",
+        "metadata": {"langgraph_checkpoint_ns": "tools:stable-task-id"},
+        "data": {
+            "error": GraphInterrupt([Interrupt(value={"type": "ask_user"})]),
+            "input": {"questions": []},
+        },
+    }
+
+    accumulate_display_state(event, [], tools, False)
+
+    assert tools[0]["status"] == "waiting_user"
+    assert tools[0]["result"] == ""
+    assert "duration" not in tools[0]
+    assert "resultLength" not in tools[0]
+
+
 def test_accumulate_display_state_token():
     """Token content should be appended."""
     chunk = MagicMock()

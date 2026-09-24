@@ -261,7 +261,7 @@ def test_activate_agent_restores_skills_to_default_enabled_state():
     )
     engine._mcp_generation = 3
     loader = FakeLoader()
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(mcp_manager=None, filtered_loader=loader)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(mcp_manager=None, skills_loader=loader)))
 
     result = activate_agent("power", request, engine, admin=SimpleNamespace(role="admin"))
 
@@ -297,7 +297,7 @@ def test_activate_agent_disables_allowed_skills_when_default_disabled():
     )
     engine._mcp_generation = 3
     loader = FakeLoader()
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(mcp_manager=None, filtered_loader=loader)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(mcp_manager=None, skills_loader=loader)))
 
     result = activate_agent("skill-tester", request, engine, admin=SimpleNamespace(role="admin"))
 

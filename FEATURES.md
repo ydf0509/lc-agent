@@ -249,9 +249,12 @@ Skills 是 AI 可动态加载的指令工作流：每个 Skill 是一个目录�
 
 ### 核心能力
 - **AI 按需加载**：Agent 判断 Skill 描述匹配当前任务时，自动加载完整指令
-- **可执行脚本**：Skill 内可包含脚本，AI 通过工具直接执行
+- **可执行脚本**：Skill 内可包含脚本，AI 通过 `skill__execute_script` 传入完整 shell 命令执行（工作目录为 Skill 目录）
 - **资源读取**：AI 可读取 Skill 目录内的附属资源文件
 - **运行时开关**：前端支持运行时单独启停每个 Skill，无需重启
+
+### 工具
+`skill__load_skill`、`skill__read_content`、`skill__execute_script` 注册给 Agent；`skill__list_skills` 不注册，Skill 清单由系统提示注入。
 
 ### 多层 Skills
 - 全局 Skills：由 config.jsonc `skills` 字段指定的目录

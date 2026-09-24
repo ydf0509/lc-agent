@@ -56,6 +56,10 @@
         <button v-if="isErrorTruncated" class="tg-more" @click.stop="openErrorModal">错误已截断 · 共 {{ errorTotal }} 字符 · 看全文</button>
       </ToolField>
 
+      <ToolField v-else-if="toolCall.status === 'waiting_user'" label="状态">
+        <div class="tg-waiting"><span class="waiting-dot"></span>等待用户回答，回答后将自动继续</div>
+      </ToolField>
+
       <ToolField v-else-if="!isCollapsed && previewText" label="结果" :offset="8">
         <div class="tg-result-wrap">
           <div class="tg-result">
@@ -116,7 +120,7 @@ const statusText = computed(() => statusLabel(props.toolCall.status))
 // 不同工具配不同小图标，替代之前的“工”字占位
 const badgeIcon = computed(() => {
   const name = props.toolCall.name || ''
-  if (name === 'load_skill' || name === 'read_skill_resource' || name === 'run_skill_script') return MagicStick
+  if (name.startsWith('skill__')) return MagicStick
   if (name.endsWith('__read_file') || name.endsWith('__read_multiple_files') || name.endsWith('__get_file_info')) return Document
   if (name.endsWith('__list_directory') || name.endsWith('__create_directory')) return Folder
   if (name.endsWith('__search_files')) return Search
@@ -140,9 +144,10 @@ const READABLE_NAMES: Record<string, string> = {
   file_write__delete_file: '删除文件',
   get_system_info: '看系统信息',
   utility__get_current_time: '看时间',
-  load_skill: '加载技能',
-  read_skill_resource: '读技能资料',
-  run_skill_script: '运行技能脚本',
+  skill__list_skills: '列出技能',
+  skill__load_skill: '加载技能',
+  skill__read_content: '读技能资料',
+  skill__execute_script: '运行技能脚本',
   ask_user: '问用户',
   write_todos: '任务清单',
 }
@@ -183,18 +188,18 @@ function summarizeArgs(name: string, rawArgs: Record<string, unknown>): string {
   if (name === 'utility__get_current_time' || name === 'get_current_time') {
     return get('timezone') || 'Asia/Shanghai'
   }
-  if (name === 'load_skill') return clipSummary(get('skill_name') || get('name'), 40)
-  if (name === 'read_skill_resource') {
+  if (name === 'skill__load_skill') return clipSummary(get('skill_name') || get('name'), 40)
+  if (name === 'skill__read_content') {
     const skill = get('skill_name')
-    const res = get('resource_name')
-    if (skill && res) return clipSummary(`${skill} / ${res}`, 48)
-    return clipSummary(skill || res, 40)
+    const file = get('file_path')
+    if (skill && file) return clipSummary(`${skill} / ${file}`, 48)
+    return clipSummary(skill || file, 40)
   }
-  if (name === 'run_skill_script') {
+  if (name === 'skill__execute_script') {
     const skill = get('skill_name')
-    const script = get('script_name')
-    if (skill && script) return clipSummary(`${skill} / ${script}`, 48)
-    return clipSummary(skill || script, 40)
+    const command = get('command')
+    if (skill && command) return clipSummary(`${skill} / ${command}`, 48)
+    return clipSummary(skill || command, 40)
   }
   if (name.endsWith('ask_user') || name === 'ask_user') {
     const questions = (args as Record<string, unknown>).questions
@@ -367,6 +372,7 @@ const renderedPreview = computed(() =>
 }
 
 .tool-generic-card.running { border-left-color: var(--el-color-primary); }
+.tool-generic-card.waiting_user { border-left-color: var(--el-color-warning); }
 .tool-generic-card.done { border-left-color: var(--el-color-success); }
 .tool-generic-card.error { border-left-color: var(--el-color-danger); }
 
@@ -444,6 +450,23 @@ const renderedPreview = computed(() =>
 @keyframes tg-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
+}
+
+.tg-waiting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--el-color-warning);
+}
+
+.waiting-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--el-color-warning);
+  animation: tg-pulse 1.4s ease-in-out infinite;
+  flex: none;
 }
 
 .meta-item {

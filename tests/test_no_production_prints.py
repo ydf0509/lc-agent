@@ -8,8 +8,8 @@ def _is_skill_cli_script(relative_path: Path) -> bool:
     """Skill CLI scripts live under `skills/**/scripts/`.
 
     They print on purpose: stdout IS the tool's return value, consumed by the
-    agent through `run_skill_script`. Routing that through a logger would break
-    the skill, so these are exempt from the no-print rule.
+    agent through `skill__execute_script`. Routing that through a logger would
+    break the skill, so these are exempt from the no-print rule.
     """
     parts = relative_path.parts
     return "skills" in parts and "scripts" in parts

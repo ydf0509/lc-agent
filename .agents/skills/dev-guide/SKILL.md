@@ -68,8 +68,8 @@ lc_agent/
 │   ├── manager.py       # McpManager — 连接/管理 MCP 服务器
 │   └── tool_adapter.py  # MCP schema → LangChain StructuredTool
 ├── skills/
-│   ├── filtered_loader.py  # Skills 运行时开关（enable/disable）
-│   └── scanner.py       # Skills 目录扫描
+│   ├── filtered_loader.py  # LcAgentSkillLoader — 全局目录 + 项目 overlay + 运行时开关
+│   └── skill_middleware.py # SkillsMiddleware 子类 + skills 系统提示词
 ├── server/
 │   ├── app.py           # FastAPI 工厂 + 静态文件挂载
 │   ├── websocket.py     # ChatWebSocketHandler
@@ -315,8 +315,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from lc_agent.core.chat_model import ChatOpenAIReasoning
 
 # Skills
-from langchain_agentskills import SkillsToolkit
-from langchain_agentskills.loaders import DirectorySkillLoader, CompositeSkillLoader
+from nb_langchain_agentskills import SkillsMiddleware
+from lc_agent.skills.filtered_loader import LcAgentSkillLoader
 ```
 
 ## 8. 数据库
@@ -362,7 +362,7 @@ from langchain_agentskills.loaders import DirectorySkillLoader, CompositeSkillLo
 | Agent 创建 | `create_agent` | `langchain` |
 | TodoList | `TodoListMiddleware` | `langchain.agents.middleware` |
 | 上下文摘要 | `SummarizationMiddleware` | `langchain.agents.middleware` |
-| Skills 系统 | `SkillsToolkit` | `langchain_agentskills` |
+| Skills 系统 | `SkillsMiddleware` | `nb_langchain_agentskills` |
 | Checkpoint | `AsyncSqliteSaver` | `langgraph` |
 
 **查找顺序：**

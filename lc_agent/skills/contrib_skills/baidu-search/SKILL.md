@@ -15,7 +15,7 @@ version: 1.1.0
 
 ## 调用
 
-通过 `run_skill_script` 执行 `baidu_search_cli.py`。
+通过 `skill__execute_script` 执行 `scripts/baidu_search_cli.py`。cwd 就是 skill 根目录，命令里写相对路径即可。
 
 ### search
 **使用 search 联网搜索发现关键词相关的网页**
@@ -23,8 +23,7 @@ version: 1.1.0
 ```json
 {
   "skill_name": "baidu-search",
-  "script_name": "baidu_search_cli.py",
-  "script_args": ["search", "关键词", "--num", "30"]
+  "command": "python scripts/baidu_search_cli.py search 关键词 --num 30"
 }
 ```
 
@@ -42,8 +41,7 @@ search 返回结果中的 results 的 url 就是需要调用 extract 提取url�
 ```json
 {
   "skill_name": "baidu-search",
-  "script_name": "baidu_search_cli.py",
-  "script_args": ["extract", "https://example.com/article"]
+  "command": "python scripts/baidu_search_cli.py extract https://example.com/article"
 }
 ```
 
@@ -69,14 +67,14 @@ extract 返回 `title`/`content`/`date`/`author`/`sitename`/`length`/`truncated`
 ## 出错应对
 
 `search` 一次返回多条结果（默认 30 条），每条都带 `abstract`/`url`/`site`。先读 `abstract` 判断相关性，只对真正需要的那几条调 `extract`。
-**某一条 `extract` 失败很正常，不要死磕单条 url** —— 先看 `site` 是否匹配 `references/` 里的站点策略（如知乎），命中就 `read_skill_resource` 加载对应文档按其步骤抓；没命中就换 search 结果里下一条相关 url 继续。只有所有相关链接都失败时，才向用户说明并退回用 `abstract` 摘要回答。
+**某一条 `extract` 失败很正常，不要死磕单条 url** —— 先看 `site` 是否匹配 `references/` 里的站点策略（如知乎），命中就 `skill__read_content` 加载对应文档按其步骤抓；没命中就换 search 结果里下一条相关 url 继续。只有所有相关链接都失败时，才向用户说明并退回用 `abstract` 摘要回答。
 
 
 需要区分的错误类型：
 
 - **HTTP 4xx/5xx**（如"HTTP 403 访问失败: https://真实url"）：404/410 说明页面已失效，直接换下一条；403 如果这条 url 确实关键，可换 `--client requests` 重试一次，否则也换下一条。
 - **提取失败**（"提取失败: https://真实url（页面无正文）"）：页面是 JS 动态渲染或强反爬站，换下一条相关 url。
-- **知乎等强反爬站**：`site` 命中知乎时不要 `extract`（100% 返回 403），直接 `read_skill_resource` 读 `zhihu-browser-access.md`，按其中的 playwright 步骤抓。
+- **知乎等强反爬站**：`site` 命中知乎时不要 `extract`（100% 返回 403），直接 `skill__read_content` 读 `references/zhihu-browser-access.md`，按其中的 playwright 步骤抓。
 - **反爬拦截**（stderr 含"百度安全验证"）：这是全局拦截，换 url 也没用 —— 立即停止所有搜索/抓取，告知用户"搜索频率过高，稍后再试"。连续调用间隔 5 秒以上可预防。
 - **依赖缺失**（ImportError）：告知用户安装对应包（`requests`/`beautifulsoup4`/`trafilatura`/`curl_cffi`）。
 

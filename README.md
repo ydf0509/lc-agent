@@ -446,7 +446,7 @@ launch_desktop(host='127.0.0.1', port=8001, title="心有灵犀") # host port ti
 
 除了配 MCP，框架还内置一个**零成本**的联网 skill：`baidu-search`（位于 `lc_agent/skills/contrib_skills/baidu-search`）。
 
-它走百度接口，**免费、无限次、无需 API key、无需启动任何 MCP 服务**，开箱即用。提供两个命令，Agent 通过 `run_skill_script` 执行 `baidu_search_cli.py` 调用：
+它走百度接口，**免费、无限次、无需 API key、无需启动任何 MCP 服务**，开箱即用。提供两个命令，Agent 通过 `skill__execute_script` 传入完整命令（如 `python scripts/baidu_search_cli.py search 关键词`）调用：
 
 - `search`：按关键词联网检索，返回标题/链接/摘要/时间
 - `extract`：抓取指定网页并提取正文，可直接吃 `search` 返回的链接

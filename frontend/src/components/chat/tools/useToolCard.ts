@@ -33,6 +33,7 @@ export function formatDuration(ms?: number): string {
 export function statusLabel(status: ToolCardStatus): string {
   switch (status) {
     case 'running': return '执行中'
+    case 'waiting_user': return '等待回答'
     case 'done': return '完成'
     case 'error': return '错误'
     case 'cancelled': return '已取消'
@@ -44,6 +45,7 @@ export function statusLabel(status: ToolCardStatus): string {
 export function statusTagType(status: ToolCardStatus): 'warning' | 'success' | 'danger' | 'info' {
   switch (status) {
     case 'running': return 'warning'
+    case 'waiting_user': return 'warning'
     case 'done': return 'success'
     case 'error': return 'danger'
     default: return 'info'

@@ -100,7 +100,7 @@ def validate(skill_dir: Path) -> list[str]:
             results.append(_error(f"name '{name}' contains consecutive hyphens"))
             errors += 1
         if name != skill_dir.name:
-            results.append(_warn(f"name '{name}' does not match directory '{skill_dir.name}' — load_skill may fail"))
+            results.append(_warn(f"name '{name}' does not match directory '{skill_dir.name}' — skill__load_skill may fail"))
         else:
             results.append(_ok(f"Name: '{name}' matches directory"))
 

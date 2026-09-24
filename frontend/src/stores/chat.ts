@@ -142,7 +142,7 @@ export interface ToolCall {
   bgProcessRunning?: boolean
   fileDiff?: FileDiffData
   filePreview?: FilePreviewData
-  status: 'pending' | 'running' | 'done' | 'error' | 'cancelled' | 'interrupted'
+  status: 'pending' | 'running' | 'waiting_user' | 'done' | 'error' | 'cancelled' | 'interrupted'
   startTime?: number
   duration?: number
   resultLength?: number
@@ -171,6 +171,7 @@ function normalizeToolStatus(status: any): ToolCall['status'] {
   if (status === 'pending' || status === 'running' || status === 'done' || status === 'error') {
     return status
   }
+  if (status === 'waiting_user') return 'waiting_user'
   if (status === 'cancelled' || status === 'interrupted') return status
   if (status === 'success') return 'done'
   return 'done'
@@ -599,7 +600,9 @@ export function applySubAgentToolResult(
   )
   if (idx === -1) return SUBAGENT_UNCHANGED
 
-  const resultStatus = msg.status === 'error' || msg.is_error ? 'error' : 'done'
+  const resultStatus = msg.status === 'waiting_user'
+    ? 'waiting_user'
+    : (msg.status === 'error' || msg.is_error ? 'error' : 'done')
   const realIdx = updatedCalls.length - 1 - idx
   updatedCalls[realIdx] = { ...updatedCalls[realIdx], result: msg.result, status: resultStatus }
   message.subAgents[toolCallId] = { ...sa, innerToolCalls: updatedCalls }
@@ -919,8 +922,12 @@ export const useChatStore = defineStore('chat', () => {
         const tc = last.toolCalls.find(t => t.runId === toolCallId)
         if (tc) {
           tc.result = msg.result
-          tc.status = (msg.status === 'error' || msg.is_error) ? 'error' : 'done'
-          tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
+          tc.status = msg.status === 'waiting_user'
+            ? 'waiting_user'
+            : ((msg.status === 'error' || msg.is_error) ? 'error' : 'done')
+          if (tc.status !== 'waiting_user') {
+            tc.duration = tc.startTime ? Date.now() - tc.startTime : undefined
+          }
           tc.resultLength = msg.result?.length || 0
           const isBgRunning = tc.name === 'command__start_background_process'
             && tc.pid

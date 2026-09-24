@@ -131,7 +131,7 @@ lc-agent 禁止在任何文件顶部写此语句。`@tool`/`@lc_tool` 装饰器�
 | `QuickToolsMiddleware` | `lc_agent/middlewares/quick_tools.py` | 任意工具列表 | 可选静态文本 |
 | `SystemPromptMiddleware` | `lc_agent/middlewares/system_prompt.py` | 无 | 任意文本块 |
 | `TodoListMiddleware` | `langchain.agents.middleware` | `write_todos` | todo 使用规则 |
-| `SkillsMiddleware` | `langchain_agentskills` | `load_skill` 等 | skills 列表 |
+| `SkillsMiddleware` | `nb_langchain_agentskills` | `skill__load_skill` 等 | skills 列表 |
 | `SummarizationMiddleware` | `langchain.agents.middleware` | 无 | 上下文摘要规则 |
 
 ---

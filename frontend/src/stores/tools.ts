@@ -38,7 +38,7 @@ export interface McpServer {
 export interface Skill {
   name: string
   description: string
-  source?: string
+  path?: string
   metadata?: Record<string, any>
   enabled: boolean
   scope?: 'global' | 'project' | 'extra'

@@ -3,31 +3,26 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from langchain_agentskills import SkillsToolkit
+from nb_langchain_agentskills import DirectorySkillLoader
 
 from lc_agent.db.models_auth import User
 from lc_agent.server.auth_middleware import get_current_user
-from lc_agent.skills.filtered_loader import FilteredSkillLoader
+from lc_agent.skills.filtered_loader import LcAgentSkillLoader
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["skills"])
 
 
-def _get_toolkit(request: Request) -> SkillsToolkit | None:
-    return getattr(request.app.state, "skills_toolkit", None)
+def _get_loader(request: Request) -> LcAgentSkillLoader | None:
+    return getattr(request.app.state, "skills_loader", None)
 
 
-def _get_loader(request: Request) -> FilteredSkillLoader | None:
-    return getattr(request.app.state, "filtered_loader", None)
-
-
-def _resolve_skill_path(skill_name: str, search_dirs: list[str]) -> str | None:
-    """Find SKILL.md absolute path for a skill by scanning directories."""
-    for d in search_dirs:
-        candidate = Path(d).expanduser().resolve() / skill_name / "SKILL.md"
-        if candidate.is_file():
-            return str(candidate)
-    return None
+def _skill_path(loader: LcAgentSkillLoader, name: str) -> str | None:
+    """Real skill directory for display; still resolved when the skill is disabled."""
+    try:
+        return str(loader.resolve_root_any(name))
+    except Exception:
+        return None
 
 
 @router.get("/skills")
@@ -63,14 +58,13 @@ def list_skills(
             # Keep loader state in sync so subsequent toggle_skill() recognizes project skills
             loader.set_project_overlay(str(project_skills_dir))
             try:
-                project_skills = loader._project_skills()
+                project_skills = loader.list_overlay_skills()
                 project_skill_names = {s.name for s in project_skills}
                 result.extend(
                     {
                         "name": s.name,
                         "description": s.description,
-                        "path": _resolve_skill_path(s.name, [str(project_skills_dir)]),
-                        "source": str(s.source) if s.source else None,
+                        "path": _skill_path(loader, s.name),
                         "metadata": s.metadata,
                         "enabled": s.name not in loader.disabled_skills,
                         "scope": "project",
@@ -84,8 +78,6 @@ def list_skills(
 
     # Explicit extra skill directories (per-preset config, scanned read-only)
     if extra_dirs:
-        from langchain_agentskills.loaders import DirectorySkillLoader
-
         for d in extra_dirs:
             if not isinstance(d, str):
                 continue
@@ -96,7 +88,10 @@ def list_skills(
             if not resolved.is_dir():
                 continue
             try:
-                dir_skills = DirectorySkillLoader(str(resolved)).list_skills()
+                extra_loader = DirectorySkillLoader(
+                    str(resolved), exclude_dirs=["__pycache__"]
+                )
+                dir_skills = extra_loader.list_skills()
             except Exception:
                 logger.warning("Failed to scan extra skills dir at %s", d, exc_info=True)
                 continue
@@ -108,8 +103,7 @@ def list_skills(
                     {
                         "name": s.name,
                         "description": s.description,
-                        "path": _resolve_skill_path(s.name, [str(resolved)]),
-                        "source": str(s.source) if s.source else None,
+                        "path": str(extra_loader.resolve_root(s.name)),
                         "metadata": s.metadata,
                         "enabled": s.name not in loader.disabled_skills,
                         "scope": "extra",
@@ -118,13 +112,11 @@ def list_skills(
                 )
 
     # Always use list_global_skills() so runtime project overlay never pollutes the global scope
-    global_dirs = loader.global_skill_dirs
     result.extend(
         {
             "name": s.name,
             "description": s.description,
-            "path": _resolve_skill_path(s.name, global_dirs),
-            "source": str(s.source) if s.source else None,
+            "path": _skill_path(loader, s.name),
             "metadata": s.metadata,
             "enabled": s.name not in loader.disabled_skills,
             "scope": "global",
@@ -173,27 +165,27 @@ def get_skill(
         "name": skill.metadata.name,
         "description": skill.metadata.description,
         "body": skill.body,
-        "resources": skill.resources,
-        "scripts": skill.scripts,
+        "files": skill.files,
+        "root": str(skill.root),
     }
 
 
-@router.get("/skills/{name}/resources/{resource_name:path}")
-def read_skill_resource(
+@router.get("/skills/{name}/files/{file_path:path}")
+def read_skill_file(
     name: str,
-    resource_name: str,
+    file_path: str,
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    """Read a skill resource file (tier 3)."""
+    """Read a file inside a skill directory (tier 3)."""
     loader = _get_loader(request)
     if loader is None:
         raise HTTPException(status_code=404, detail="Skills not configured")
     try:
-        content = loader.read_resource(name, resource_name)
+        content = loader.read_content(name, file_path)
     except Exception:
         raise HTTPException(
             status_code=404,
-            detail=f"Resource '{resource_name}' not found in skill '{name}'",
+            detail=f"File '{file_path}' not found in skill '{name}'",
         )
-    return {"skill": name, "resource": resource_name, "content": content}
+    return {"skill": name, "file": file_path, "content": content}

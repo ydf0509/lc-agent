@@ -8,6 +8,18 @@ import json
 import time
 from typing import Any
 
+from langgraph.errors import GraphInterrupt
+
+
+def _is_interrupt_pause(error: Any) -> bool:
+    """Whether a tool "error" is langgraph's interrupt() pause.
+
+    An interrupt pauses the graph to wait for user input; it is not a tool
+    failure. NodeInterrupt subclasses GraphInterrupt, so one check covers
+    both.
+    """
+    return isinstance(error, GraphInterrupt)
+
 
 def _get_checkpoint_ns(event: dict) -> str:
     """Return the langgraph_checkpoint_ns metadata string (empty = main agent)."""
@@ -331,13 +343,25 @@ def convert_stream_event(
                 "is_error": True,
             }))
         else:
-            results.append(("tool_result", {
-                "name": tool_name,
-                "tool_call_id": tool_call_id,
-                "result": error_str,
-                "status": "error",
-                "is_error": True,
-            }))
+            # Regular main-agent tool finished
+            if _is_interrupt_pause(error):
+                # interrupt() pauses the run to wait for user input; this is
+                # not a failure — mark the card as awaiting an answer.
+                results.append(("tool_result", {
+                    "name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "result": "",
+                    "status": "waiting_user",
+                    "is_error": False,
+                }))
+            else:
+                results.append(("tool_result", {
+                    "name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "result": error_str,
+                    "status": "error",
+                    "is_error": True,
+                }))
 
     elif kind == "on_custom_event":
         custom_name = event.get("name", "")
@@ -590,10 +614,16 @@ def accumulate_display_state(
             )
             if tool_call:
                 start_time = tool_call.get("startTime")
-                tool_call["result"] = error_str
-                tool_call["status"] = "error"
-                tool_call["duration"] = int(time.time() * 1000) - start_time if start_time else None
-                tool_call["resultLength"] = len(error_str)
+                if _is_interrupt_pause(error):
+                    # Paused on interrupt(): keep the card open awaiting the
+                    # user's answer; the resume stream flips it back to done.
+                    tool_call["result"] = ""
+                    tool_call["status"] = "waiting_user"
+                else:
+                    tool_call["result"] = error_str
+                    tool_call["status"] = "error"
+                    tool_call["duration"] = int(time.time() * 1000) - start_time if start_time else None
+                    tool_call["resultLength"] = len(error_str)
 
     elif kind == "on_custom_event":
         # 文件 diff / 写入预览只走 SSE 推送时，刷新后历史里就没有了。

@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<template>
   <aside
     class="right-panel"
     :class="{ collapsed }"
@@ -381,7 +381,7 @@
                     <div class="skill-body">
                       <div class="skill-line">
                         <span class="skill-name" :class="{ dimmed: !skill.enabled }">{{ skill.name }}</span>
-                        <span v-if="skill.source" class="skill-path" :title="skill.source">{{ skill.source }}</span>
+                        <span v-if="skill.path" class="skill-path" :title="skill.path">{{ skill.path }}</span>
                       </div>
                       <span class="skill-desc">{{ skill.description }}</span>
                     </div>

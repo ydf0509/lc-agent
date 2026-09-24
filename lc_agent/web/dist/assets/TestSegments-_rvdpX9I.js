@@ -1,4 +1,4 @@
-import{P as e,a as t,c as n,d as r,i,l as a,o,s,t as c,u as l,y as u}from"./index-Bsfb2NoC.js";a(),u();var d={style:{padding:`20px`,background:`var(--el-bg-color-page)`,"min-height":`100vh`,color:`var(--el-text-color-regular)`}},f={style:{display:`flex`,"flex-direction":`column`,gap:`16px`,"max-width":`860px`}},p={style:{"font-size":`12px`,color:`var(--el-text-color-secondary)`,"margin-bottom":`4px`}},m=n({__name:`TestSegments`,setup(n){function a(e){return{status:`done`,duration:800,startTime:Date.now()-800,...e}}let u=Array.from({length:120},(e,t)=>`line ${t+1}: ${`x`.repeat(60)}`).join(`
+import{P as e,a as t,c as n,d as r,i,l as a,o,s,t as c,u as l,y as u}from"./index-DPdYxh31.js";a(),u();var d={style:{padding:`20px`,background:`var(--el-bg-color-page)`,"min-height":`100vh`,color:`var(--el-text-color-regular)`}},f={style:{display:`flex`,"flex-direction":`column`,gap:`16px`,"max-width":`860px`}},p={style:{"font-size":`12px`,color:`var(--el-text-color-secondary)`,"margin-bottom":`4px`}},m=n({__name:`TestSegments`,setup(n){function a(e){return{status:`done`,duration:800,startTime:Date.now()-800,...e}}let u=Array.from({length:120},(e,t)=>`line ${t+1}: ${`x`.repeat(60)}`).join(`
 `),m=[`Traceback (most recent call last):`,...Array.from({length:18},(e,t)=>`  File "/src/module_${t}.py", line ${t*10+3}, in handler_${t}\n    raise SomeError("frame ${t}")`),`SomeError: boom`].join(`
 `),h=[{label:`1. edit_block（有 diff）`,toolCall:a({name:`file_write__edit_block`,args:{file_path:`src/app.py`,old_string:`timeout = 30`,new_string:`timeout = 60`},result:`Replaced 1 occurrence(s) in src/app.py
   1 lines → 1 lines`,fileDiff:{file:`src/app.py`,start_line:40,context_before:[`ctx = load()`,`retry = 3`],removed:[`timeout = 30`],added:[`timeout = 60`],context_after:[`logger.info("ok")`]}})},{label:`2. write_file 新建`,toolCall:a({name:`file_write__write_file`,args:{path:`docs/report.md`,content:`# 周报
@@ -12,7 +12,7 @@ ready in 1.2s · listening on :3000
 `}},{label:`6. run_command 失败`,toolCall:{name:`command__run_command`,args:{command:`pytest tests/test_missing.py`},status:`error`,duration:1500,startTime:Date.now()-1500,result:`ERROR: file or directory not found: tests/test_missing.py
 [exit_code=4, duration=1500ms]`}},{label:`7. 通用兜底（read_file）`,toolCall:a({name:`file_read__read_file`,args:{path:`src/app.py`,offset:0,length:50},result:`[Lines 1-50 of 120 total]
 import os
-...`})},{label:`8. load_skill（展开区显示原始工具名 + 入参）`,toolCall:a({name:`load_skill`,args:{skill_name:`anysearch`},result:`## Overview
+...`})},{label:`8. skill__load_skill（展开区显示原始工具名 + 入参）`,toolCall:a({name:`skill__load_skill`,args:{skill_name:`anysearch`},result:`## Overview
 AnySearch is a unified real-time search service supporting general web search, vertical domain search, parallel fetching and structured extraction.
 
 ## When to use

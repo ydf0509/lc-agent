@@ -583,7 +583,7 @@ def activate_agent(
             "reason": "code agent is controlled by its registered graph",
         }
     manager = getattr(request.app.state, "mcp_manager", None)
-    loader = getattr(request.app.state, "filtered_loader", None)
+    loader = getattr(request.app.state, "skills_loader", None)
     registry = ToolRegistry()
 
     if preset.allowed_tool_groups == [] and preset.allowed_mcp_servers == [] and preset.allowed_skills == []:
