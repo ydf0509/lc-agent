@@ -344,7 +344,11 @@ def get_file_info(
 @tool(group="file_read", group_description="文件读取")
 def search_files(
     path: Annotated[str, "Root directory to search in"],
-    pattern: Annotated[str, "Search pattern; regex/text for content search, glob pattern (e.g. '*.py') for file search"],
+    pattern: Annotated[str, '''Search pattern; regex/text for content search, glob pattern (e.g. '*.py') for file search.
+     "search_type='files' 时为匹配完整文件名的通配符模式：'*celery*' 表示文件名包含 celery，"
+    "裸词 'celery' 仅匹配名字恰好叫 celery 的文件；"
+    "search_type='content' 时为在文件内容中匹配的正则或文本，裸词即可。",
+    '''],
     search_type: Annotated[
         str,
         "Search mode: 'content' searches inside file contents; 'files' matches filenames by glob pattern",

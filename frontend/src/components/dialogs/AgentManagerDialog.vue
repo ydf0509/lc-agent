@@ -589,6 +589,10 @@
                                   <span class="skill-group-icon">📁</span>
                                   <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
                                   <span class="skill-group-count">{{ grp.skills.length }}</span>
+                                  <span class="skill-group-actions" @click.stop>
+                                    <button class="skill-group-action-btn" type="button" title="勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'global', true)">全部开启</button>
+                                    <button class="skill-group-action-btn is-off" type="button" title="取消勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'global', false)">全部禁用</button>
+                                  </span>
                                 </div>
                                 <el-collapse-transition>
                                   <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
@@ -662,6 +666,10 @@
                                   <span class="skill-group-icon">📁</span>
                                   <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
                                   <span class="skill-group-count">{{ grp.skills.length }}</span>
+                                  <span class="skill-group-actions" @click.stop>
+                                    <button class="skill-group-action-btn" type="button" title="勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'project', true)">全部开启</button>
+                                    <button class="skill-group-action-btn is-off" type="button" title="取消勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'project', false)">全部禁用</button>
+                                  </span>
                                 </div>
                                 <el-collapse-transition>
                                   <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
@@ -756,6 +764,10 @@
                                     <span class="skill-group-icon">📁</span>
                                     <span class="skill-group-name" :title="grp.path || grp.folder">{{ grp.folder }}</span>
                                     <span class="skill-group-count">{{ grp.skills.length }}</span>
+                                    <span class="skill-group-actions" @click.stop>
+                                      <button class="skill-group-action-btn" type="button" title="勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'extra', true)">全部开启</button>
+                                      <button class="skill-group-action-btn is-off" type="button" title="取消勾选该文件夹下全部 Skills" @click="checkAllSkillsInGroup(grp, 'extra', false)">全部禁用</button>
+                                    </span>
                                   </div>
                                   <el-collapse-transition>
                                     <div v-show="isSkillGroupOpen(grp.key)" class="skill-group-body">
@@ -1294,6 +1306,21 @@ function toggleSkillGroup(key: string) {
 }
 function isSkillGroupOpen(key: string): boolean {
   return expandedSkillGroups[key] !== false
+}
+
+// 批量勾选/取消一个文件夹分组内的全部 Skills（前端循环调用现有单技能接口的前提是这里只改本地选择）
+function checkAllSkillsInGroup(grp: SkillGroup, scope: 'global' | 'project' | 'extra', checked: boolean) {
+  const target = scope === 'global' ? selectedGlobalSkills : scope === 'project' ? selectedProjectSkills : selectedExtraSkills
+  const names = grp.skills.map(s => s.name)
+  if (checked) {
+    const have = new Set(target.value)
+    const add = names.filter(n => !have.has(n))
+    if (add.length) target.value = [...target.value, ...add]
+  } else {
+    const drop = new Set(names)
+    const next = target.value.filter(n => !drop.has(n))
+    if (next.length !== target.value.length) target.value = next
+  }
 }
 
 let _skillFetchSeq = 0
@@ -2784,6 +2811,41 @@ defineExpose({ open })
   background: var(--el-color-primary);
   border-radius: 999px;
   padding: 0 8px;
+}
+
+/* 分组头右侧的批量操作按钮：全部开启 / 全部禁用 */
+.skill-group-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.skill-group-action-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--el-color-primary);
+  border-radius: 4px;
+  padding: 1px 8px;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+
+.skill-group-action-btn:hover {
+  filter: brightness(1.12);
+}
+
+.skill-group-action-btn:active {
+  transform: translateY(1px);
+}
+
+.skill-group-action-btn.is-off {
+  background: var(--el-color-danger);
 }
 
 .skill-group-body {

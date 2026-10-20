@@ -12,16 +12,27 @@ and the enclosed text is likewise moved to ``reasoning_content``.
 It also re-injects ``reasoning_content`` into outbound request payloads so
 providers that require it (DeepSeek V4 thinking mode) do not reject follow-up
 messages with HTTP 400.
+
+This class is pinned to the Chat Completions wire format: ``use_responses_api``
+is forced to ``False`` at construction. langchain-openai otherwise auto-routes
+to ``/v1/responses`` based on heuristics (model name containing ``codex``,
+builtin tools in the payload, ``include``/``truncation``/``reasoning`` params),
+and the Responses streaming format has no ``choices[N].delta`` structure, which
+would silently disable every parser in this class.
 """
 
 
 import contextvars
+import logging
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, ClassVar
 
 from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
+from pydantic import field_validator
+
+logger = logging.getLogger(__name__)
 
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
@@ -37,6 +48,25 @@ class ChatOpenAIReasoning(ChatOpenAI):
     Also detects ``<think>...</think>`` tags in the content stream and moves
     the enclosed text to ``additional_kwargs["reasoning_content"]``.
     """
+
+    # 固定走 chat completions：本类的流解析（choices[0].delta.reasoning_content、
+    # think 标签、usage 去重）只认 completions 流格式。langchain-openai 在
+    # use_responses_api=None 时会按启发式自动路由到 /v1/responses（模型名含
+    # "codex"、gpt-5-*-pro 前缀、payload 带内置工具、include/truncation/reasoning
+    # 参数等都会触发），而 Responses 流没有 choices[N].delta 结构，一旦被路由过去
+    # 本类所有解析会静默失效。这里显式钉死 False，显式传 True（含 config
+    # llm_params 透传）也会被压回。
+    use_responses_api: bool = False
+
+    @field_validator("use_responses_api", mode="before")
+    @classmethod
+    def _pin_chat_completions(cls, v: Any) -> Any:
+        if v:
+            logger.warning(
+                "ChatOpenAIReasoning 固定走 chat completions，忽略 use_responses_api=%r",
+                v,
+            )
+        return False
 
     _think_mode: ClassVar[contextvars.ContextVar[bool]] = contextvars.ContextVar(
         "ChatOpenAIReasoning__think_mode", default=False,

@@ -90,6 +90,9 @@
 **ai coding 编辑用户代码，类似cursor codex的代码变动 diff 红绿渲染**
 ![ai coding 编辑用户代码，类似cursor codex的代码变动 diff 红绿渲染](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/aicoding_edit.png)
 
+**ai coding 右侧清晰的聊天轮次，工具调用，token消耗，耗时**
+![ai coding 右侧清晰的聊天轮次，工具调用，token消耗，耗时](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/ai_coding3.png)
+
 **ai coding连续完成4个脚本，使用todolist自动规划任务步骤**
 ![ai coding2](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/aicoding2.png)
 
@@ -474,13 +477,28 @@ lc-agent 既可以作为 你的private gpt纯聊天页面来使用，也可以�
 
 ### 质疑lc-agent是不是装逼重复造轮子，为什么不直接用codex traework？
 
+lc-agent是框架，接管langchain graph对象。
+
 lc-agent既是产品又是框架， 是给希望开发agent人员用的，或者对agent开发感兴趣，或者对ai为什么能编程写代码有兴趣的人员用的。是给希望自定义开发agent的，尤其是使用langchain开发agent的人 用的。 里面的很多功能都是对观测llm行为有巨大帮助的，看下lc-agent的前端界面就知道了，里面有大量的功能是帮助看清和llm交互的详细过程，而不是简单的像`openwebui`那样给普通非码农用的普通聊天网页。从lc-agent前端就能很清楚知道到底和llm是怎么交互的，codex traework qoder是黑盒的，不方便你看到底层交互原理。
 
 lc-agent中可以创建不同的特定agent，各种主流agent玩法功能已经全部包含了。
 
-codex是给普通码农编程用的，如果你对开发自己的agent毫无兴需求和兴趣，对和llm交互毫无兴趣，对ai原理毫无兴趣，只是希望用ai来完成写普通业务项目代码，那当然直接用codex就可以了。
+codex是给普通码农编程用的，如果你对开发自己的agent毫无兴需求和兴趣，对和llm交互毫无兴趣，对ai agent原理毫无兴趣，只是希望用ai来完成写普通业务项目代码，那当然直接用codex就可以了。
+
+lc-agent系统提示词很少，除了必要的工具描述，不内置系统级提示词，是通过用户填写提示词，关联提示词，绝对的白盒，而不是一个黑盒内置系统级提示词，提示词完全由用户做主。
 
 lc-agent 是综合了openwebui openclaw trae-ide workbuddy 的功能，能bs方式部署，也能单机本机cs部署。
+
+
+## 推荐做法
+
+### win用户推荐用户安装 PowerShell 7.xx版本
+
+lc-agent对win用户优先自动探测并使用PowerShell 7.xx版本，pwsh 7.xx对命令行支持的更好。
+powershell 5.xx命令行表达能力很弱，对于复杂命令行命令agent很容易写错。
+
+安装pwsh (PowerShell 7.xx)
+`winget install --id Microsoft.PowerShell --source winget`
 
 ## License
 
