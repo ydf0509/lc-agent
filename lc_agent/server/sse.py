@@ -7,7 +7,6 @@ API design aligns with LangGraph /threads/{id}/runs/stream pattern.
 import asyncio
 import logging
 import time
-import traceback
 import uuid
 from typing import Any
 
@@ -26,6 +25,7 @@ from lc_agent.core.http_trace import (
 from lc_agent.server import persistence, run_session, stream_utils
 from lc_agent.server.subagent_tracker import SubAgentRunTracker
 from lc_agent.server.usage_recorder import build_model_map, record_usage
+from lc_agent.utils.error_text import safe_traceback_text
 from lc_agent.utils.loggers import server_logger
 
 router = APIRouter(prefix="/api/threads", tags=["chat-sse"])
@@ -423,13 +423,11 @@ async def _send_stream(thread_id: str, req: RunStreamRequest, request: Request):
         await persistence.save_ui_message(thread_id, "user", content)
         round_number = await persistence.get_session_user_message_count(thread_id)
     except Exception as e:
-        traceback.print_exc()
+        logger.error("Failed before starting chat stream for thread %s\n%s", thread_id, safe_traceback_text(e))
         error = e
 
         async def error_stream():
-            error_info = stream_utils.categorize_error(error)
-            error_info["tech_detail"] = str(error)
-            error_info["message"] = str(error)
+            error_info = stream_utils.build_error_event(error)
             yield stream_utils.format_sse_event("error", error_info)
 
         session.mark_finished()  # 还没起跑就失败：放掉注册，别拦住下一轮
@@ -711,7 +709,7 @@ async def _send_stream(thread_id: str, req: RunStreamRequest, request: Request):
                 )
 
         except Exception as e:
-            traceback.print_exc()
+            logger.error("Chat stream failed for thread %s\n%s", thread_id, safe_traceback_text(e))
             if "subagent_tracker" in locals():
                 for evt_type, evt_data in subagent_tracker.finalize_open_runs(status="error"):
                     yield stream_utils.format_sse_event(evt_type, evt_data)
@@ -733,9 +731,7 @@ async def _send_stream(thread_id: str, req: RunStreamRequest, request: Request):
                 elapsed_ms=int((time.time() - stream_start_time) * 1000),
             )
             round_finalized = True
-            error_info = stream_utils.categorize_error(e)
-            error_info["tech_detail"] = str(e)
-            error_info["message"] = str(e)
+            error_info = stream_utils.build_error_event(e)
             yield stream_utils.format_sse_event("error", error_info)
         finally:
             # 生成器被直接取消（刷新 / 任务取消）时，上面所有分支都不会执行，
@@ -1063,7 +1059,7 @@ async def _resume_stream(thread_id: str, req: RunStreamRequest, request: Request
             yield stream_utils.format_sse_event("done", done_payload)
 
         except Exception as e:
-            traceback.print_exc()
+            logger.error("Chat stream failed for thread %s\n%s", thread_id, safe_traceback_text(e))
             if "subagent_tracker" in locals():
                 for evt_type, evt_data in subagent_tracker.finalize_open_runs(status="error"):
                     yield stream_utils.format_sse_event(evt_type, evt_data)
@@ -1085,9 +1081,7 @@ async def _resume_stream(thread_id: str, req: RunStreamRequest, request: Request
                 elapsed_ms=int((time.time() - stream_start_time) * 1000),
             )
             round_finalized = True
-            error_info = stream_utils.categorize_error(e)
-            error_info["tech_detail"] = str(e)
-            error_info["message"] = str(e)
+            error_info = stream_utils.build_error_event(e)
             yield stream_utils.format_sse_event("error", error_info)
         finally:
             # 生成器被直接取消（刷新 / 任务取消）时，上面所有分支都不会执行，

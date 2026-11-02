@@ -285,6 +285,11 @@ watch(
     }
     if (role !== 'self' || handledRevealToken.value === token) return
     handledRevealToken.value = token
+    // 定位目标是目录：顺手展开它，用户能直接看到内容（搜索结果点文件夹 = "进入"的预期）
+    if (isDir.value) {
+      isOpen.value = true
+      void ensureChildrenLoaded()
+    }
     void flashReveal()
   },
   { immediate: true },

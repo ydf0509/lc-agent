@@ -2,7 +2,7 @@
   <div style="padding:20px; background:var(--el-bg-color-page); min-height:100vh; color:var(--el-text-color-regular);">
     <h2>Tool Cards P0 Preview</h2>
     <div style="margin:10px 0; font-size:12px; color:var(--el-text-color-secondary);">
-      编辑 / 新建 / 追加 / 短命令 / 长流式 / 失败命令 / 通用兜底 / 技能加载 / 长入参 / 折叠态出错 / 无参 MCP 工具新旧数据，共 12 组
+      编辑 / 新建 / 追加 / 短命令 / 长流式 / 失败命令 / 通用兜底 / 技能加载 / 长入参 / 折叠态出错 / 无参 MCP 工具新旧数据，共 {{ samples.length }} 组
     </div>
     <div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
       <section v-for="sample in samples" :key="sample.label">
@@ -209,6 +209,55 @@ const samples: { label: string; toolCall: ToolCall; collapsed?: boolean }[] = [
       duration: 300,
       startTime: Date.now() - 300,
       result: LONG_ERROR,
+    },
+  },
+  {
+    label: '17. run_command 带参数（参数行显示 max_run_ms / working_directory + 多行命令 3 行截断）',
+    toolCall: done({
+      name: 'command__run_command',
+      args: {
+        command: '$env:PYTHONPATH="D:\\codes\\lc-agent"; Start-Sleep -Seconds 1; Write-Output "probe line one"\nWrite-Output "probe line two"\nGet-Content .tmp\\probe.txt -TotalCount 5',
+        max_run_ms: 30000,
+        working_directory: 'D:\\codes\\lc-agent',
+      },
+      result: JSON.stringify({
+        exit_code: 0,
+        duration_ms: 1200,
+        timed_out: false,
+        stdout: 'probe line one\nprobe line two\n',
+        stderr: '',
+      }, null, 2),
+    }),
+  },
+  {
+    label: '18. skill__execute_script（skill_name / max_run_ms / working_directory 全展示）',
+    toolCall: done({
+      name: 'skill__execute_script',
+      args: {
+        skill_name: 'baidu-search',
+        command: 'python scripts/baidu_search_cli.py search "lc-agent 框架"',
+        max_run_ms: 180000,
+        working_directory: 'D:\\codes\\lc-agent\\lc_agent\\skills\\contrib_skills\\baidu-search',
+      },
+      result: JSON.stringify({
+        exit_code: 0,
+        duration_ms: 900,
+        timed_out: false,
+        stdout: '[1] lc-agent 框架主页 ...\n[2] 演示项目 ...\n',
+        stderr: '',
+      }, null, 2),
+    }),
+  },
+  {
+    label: '19. start_background_process 进行中（wait_ms / working_directory 全展示 + PID 徽章）',
+    toolCall: {
+      name: 'command__start_background_process',
+      args: { command: 'npm run dev --port 3000', wait_ms: 10000, working_directory: 'D:\\codes\\lc-agent\\frontend' },
+      status: 'running',
+      startTime: Date.now() - 1500,
+      pid: 4321,
+      bgProcessRunning: true,
+      streamingOutput: 'VITE v6.0.0  ready in 800ms\n\n  ➜  Local:   http://localhost:3000/\n',
     },
   },
 ]

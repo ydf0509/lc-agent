@@ -53,7 +53,9 @@ def get_webview_storage_path() -> str:
 # 另：DWMWA_WINDOW_CORNER_PREFERENCE=DONOTROUND 去 Win11 大圆角；
 #     DwmExtendFrameIntoClientArea(1px) 保住 DWM 阴影；
 #     create_window(background_color=深色) 让 WebView2 加载前底色就是深色，不闪白；
-#     Form.MaximizedBounds 锁当前屏工作区（最大化不盖任务栏）。
+#     Form.MaximizedBounds 锁当前屏工作区（最大化不盖任务栏）；
+#     锁完 MaximizedBounds 再置 WindowState=Maximized（启动即最大化，
+#     初始尺寸本就是全工作区，只是切状态，视觉无跳变）。
 _WS_CAPTION = 0x00C00000
 _GWL_STYLE = -16
 _GWLP_WNDPROC = -4
@@ -286,9 +288,12 @@ def _apply_captionless_fix(window) -> None:
             # 最大化锁进当前屏工作区：任务栏露出来
             wa = WinForms.Screen.FromHandle(form.Handle).WorkingArea
             form.MaximizedBounds = Rectangle(wa.X, wa.Y, wa.Width, wa.Height)
+            # 启动即最大化：MaximizedBounds 已锁工作区，不会盖任务栏；
+            # 窗口初始尺寸本就是全工作区，置 Maximized 只是切状态，视觉无跳变。
+            form.WindowState = WinForms.FormWindowState.Maximized
             desktop_logger.info(
                 "Captionless patch: style 0x%08X -> 0x%08X caption_removed=%s "
-                "MaximizedBounds=(%d,%d,%d,%d)",
+                "MaximizedBounds=(%d,%d,%d,%d) WindowState=%s",
                 before & 0xFFFFFFFF,
                 after & 0xFFFFFFFF,
                 not (after & _WS_CAPTION),
@@ -296,6 +301,7 @@ def _apply_captionless_fix(window) -> None:
                 wa.Y,
                 wa.Width,
                 wa.Height,
+                form.WindowState,
             )
         except Exception:
             desktop_logger.exception("Captionless patch failed")
@@ -470,7 +476,8 @@ def _webview_process(url: str, title: str):
     captionless = sys.platform == "win32"  # 目前只在 Windows 上验证过去标题栏
     desktop_url = url + ("&" if "?" in url else "?") + "desktop=1"
     if captionless:
-        desktop_url += "&frameless=1"
+        # maximized=1：前端按钮初始显示"还原"图标，与启动即最大化一致
+        desktop_url += "&frameless=1&maximized=1"
 
     x, y, width, height = get_work_area()
     api = _DesktopApi()
@@ -501,8 +508,13 @@ def _webview_process(url: str, title: str):
     window.events.loaded += on_loaded  # type: ignore[union-attr]
 
     if captionless:
-        # shown 只 fire 一次（BrowserForm.Shown）：去标题栏 + 锁最大化工作区
-        window.events.shown += lambda: _apply_captionless_fix(window)  # type: ignore[union-attr]
+        # shown 只 fire 一次（BrowserForm.Shown）：去标题栏 + 锁最大化工作区 + 置最大化
+        def on_shown():
+            _apply_captionless_fix(window)
+            # 启动即最大化：同步 js_api 状态，前端第一次点按钮走 restore 而不是再 maximize
+            api._maximized = True
+
+        window.events.shown += on_shown  # type: ignore[union-attr]
 
     def on_started():
         _apply_window_icon(title)

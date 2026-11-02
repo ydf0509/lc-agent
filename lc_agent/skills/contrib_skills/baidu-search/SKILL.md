@@ -2,7 +2,7 @@
 name: baidu-search
 description: >-
   百度联网检索。search 按关键词搜索网页返回摘要/链接；extract 阅读指定网页提取正文。
-  用户要搜索、查资料时用 search；要读某篇文章、看某个链接内容时用 extract或者用浏览器打开。
+  用户要搜索、查资料时用 search；要读某篇文章、看某个链接内容时用 extract或者用 agent-browser skill 打开。
 version: 1.1.0
 ---
 
@@ -18,13 +18,11 @@ version: 1.1.0
 通过 `skill__execute_script` 执行 `scripts/baidu_search_cli.py`。cwd 就是 skill 根目录，命令里写相对路径即可。
 
 ### search
-**使用 search 联网搜索发现关键词相关的网页**
+**使用 search 联网搜索发现关键词相关的网页，返回网址和内容摘要**
 
-```json
-{
-  "skill_name": "baidu-search",
-  "command": "python scripts/baidu_search_cli.py search 关键词 --num 30"
-}
+```shell
+python scripts/baidu_search_cli.py search "关键词" --num 30
+# search 后面的关键词要使用引号包裹起来，这可以避免命令行参数个数识别错误
 ```
 
 | 参数 | 说明 |
@@ -39,10 +37,8 @@ search 返回结果中的 results 的 url 就是需要调用 extract 提取url�
 **使用extract提取指定url网页的正文内容**
 
 ```json
-{
-  "skill_name": "baidu-search",
-  "command": "python scripts/baidu_search_cli.py extract https://example.com/article"
-}
+python scripts/baidu_search_cli.py extract "https://example.com/article"
+
 ```
 
 | 参数 | 说明 |
@@ -53,7 +49,7 @@ search 返回结果中的 results 的 url 就是需要调用 extract 提取url�
 
 #### ！！注意：
 很多网站直接extract的http请求主url拿不到正文，例如有的是js动态渲染页面，
-如果你当前有playwright的mcp工具或者使用agent-browser skill，你使用浏览器来打开url， 禁止每次使用完后你主动关闭浏览器，你不需要重启和关闭浏览器。
+如果你当前安装了 agent-browser skill，使用 agent-browser skill 来打开url， 禁止每次使用完后主动关闭有头浏览器，你不需要重启和关闭它。
 
 ## 返回格式
 
@@ -74,7 +70,7 @@ extract 返回 `title`/`content`/`date`/`author`/`sitename`/`length`/`truncated`
 
 - **HTTP 4xx/5xx**（如"HTTP 403 访问失败: https://真实url"）：404/410 说明页面已失效，直接换下一条；403 如果这条 url 确实关键，可换 `--client requests` 重试一次，否则也换下一条。
 - **提取失败**（"提取失败: https://真实url（页面无正文）"）：页面是 JS 动态渲染或强反爬站，换下一条相关 url。
-- **知乎等强反爬站**：`site` 命中知乎时不要 `extract`（100% 返回 403），直接 `skill__read_content` 读 `references/zhihu-browser-access.md`，按其中的 playwright 步骤抓。
+- **知乎等强反爬站**：`site` 命中知乎时不要 `extract`（100% 返回 403），直接 `skill__read_content` 读 `references/zhihu-browser-access.md`，按其中的 agent-browser 步骤抓。
 - **反爬拦截**（stderr 含"百度安全验证"）：这是全局拦截，换 url 也没用 —— 立即停止所有搜索/抓取，告知用户"搜索频率过高，稍后再试"。连续调用间隔 5 秒以上可预防。
 - **依赖缺失**（ImportError）：告知用户安装对应包（`requests`/`beautifulsoup4`/`trafilatura`/`curl_cffi`）。
 

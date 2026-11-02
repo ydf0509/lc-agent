@@ -36,6 +36,37 @@ expectMatch(/\.tools-details\s*\{[\s\S]*scroll-margin:\s*72px 0 96px/, '工具�
 expectNotIncludes('@click.stop="toolsExpanded = !toolsExpanded"')
 expectNotIncludes('@click.stop="expanded = !expanded"')
 
+// 平均 TPS：纯前端按「首个 token -> llm_usage」估算，不入库。
+// 徽章显示在输入框右侧；面板里只保留 per-round 详情表的 TPS 列和 Sum 行。
+const chatStore = readFileSync(join(root, 'src/stores/chat.ts'), 'utf8')
+const sessionState = readFileSync(join(root, 'src/stores/chat-session-state.ts'), 'utf8')
+const chatInput = readFileSync(join(root, 'src/components/chat/ChatInput.vue'), 'utf8')
+
+function expectFileIncludes(content, fileName, expected) {
+  if (!content.includes(expected)) failures.push(`${fileName} 缺少: ${expected}`)
+}
+
+expectIncludes('const avgTps = computed(')
+expectIncludes('const hasRoundTps = computed(')
+expectIncludes('round.tps')
+expectNotIncludes('badge-speed')
+expectNotIncludes('⚡')
+
+expectFileIncludes(chatInput, 'ChatInput.vue', 'const lastTurnTps = computed(')
+expectFileIncludes(chatInput, 'ChatInput.vue', 'tps-badge')
+expectFileIncludes(chatInput, 'ChatInput.vue', 'tok/s')
+expectFileIncludes(chatInput, 'ChatInput.vue', '模型生成耗时')
+
+expectFileIncludes(sessionState, 'chat-session-state.ts', 'currentRoundFirstTokenAt: number')
+expectFileIncludes(sessionState, 'chat-session-state.ts', 'subagentFirstTokenAt: Map<string, number>')
+
+expectFileIncludes(chatStore, 'chat.ts', 'currentRoundFirstTokenAt')
+expectFileIncludes(chatStore, 'chat.ts', 'subagentFirstTokenAt')
+expectFileIncludes(chatStore, 'chat.ts', '_markMainFirstToken')
+expectFileIncludes(chatStore, 'chat.ts', '_markSubagentFirstToken')
+expectFileIncludes(chatStore, 'chat.ts', 'genMs')
+expectFileIncludes(chatStore, 'chat.ts', 'tps:')
+
 if (failures.length > 0) {
   console.error('Token 用量面板交互契约测试失败:')
   for (const failure of failures) console.error(`- ${failure}`)

@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from lc_agent.utils.error_text import safe_error_text
 from lc_agent.utils.loggers import server_logger
 
 
@@ -58,6 +59,7 @@ async def record_usage(
 
     rows 的每一项由 accumulate_usage 产出（含 model_id / role / sub_session_id /
     raw_model_id / provider），缺 model_id 的兜底为 "unknown" —— 宁可 unknown 也不能丢行。
+    (run_id, seq) 已存在的行直接跳过，保证中断恢复/重放不会重复插入。
     """
     if not rows:
         return 0
@@ -87,16 +89,19 @@ async def record_usage(
                     }
             finally:
                 await session.close()
-        except Exception:
-            server_logger.exception("Failed to resolve sub-session info for usage recording")
+        except Exception as e:
+            server_logger.error(
+                "Failed to resolve sub-session info for usage recording: %s",
+                safe_error_text(e),
+            )
 
     from lc_agent.db.engine import get_business_async_session
     from lc_agent.db.models_usage import LlmUsage
 
     try:
         session = get_business_async_session()
-        inserted = 0
         try:
+            values = []
             for seq, r in enumerate(rows):
                 role = r.get("role", "main")
                 model_id = r.get("model_id") or "unknown"
@@ -112,34 +117,48 @@ async def record_usage(
                     row_user_id = user_id
                     row_parent = None
 
-                session.add(LlmUsage(
-                    ts=r.get("ts") or _now(),
-                    user_id=row_user_id,
-                    session_id=session_id,
-                    parent_session_id=row_parent,
-                    agent_id=row_agent_id,
-                    model_id=model_id,
-                    raw_model_id=r.get("raw_model_id") or "",
-                    provider=r.get("provider") or "",
-                    role=role,
-                    sub_session_id=r.get("sub_session_id") or "",
-                    source=row_source,
-                    input_tokens=int(r.get("input_tokens") or 0),
-                    output_tokens=int(r.get("output_tokens") or 0),
-                    cache_read_tokens=int(r.get("cache_read_tokens") or 0),
-                    cache_write_tokens=int(r.get("cache_write_tokens") or 0),
-                    reasoning_tokens=int(r.get("reasoning_tokens") or 0),
-                    duration_ms=int(r.get("duration_ms") or 0),
-                    run_id=run_id,
-                    seq=seq,
-                ))
-                inserted += 1
+                values.append({
+                    "ts": r.get("ts") or _now(),
+                    "user_id": row_user_id,
+                    "session_id": session_id,
+                    "parent_session_id": row_parent,
+                    "agent_id": row_agent_id,
+                    "model_id": model_id,
+                    "raw_model_id": r.get("raw_model_id") or "",
+                    "provider": r.get("provider") or "",
+                    "role": role,
+                    "sub_session_id": r.get("sub_session_id") or "",
+                    "source": row_source,
+                    "input_tokens": int(r.get("input_tokens") or 0),
+                    "output_tokens": int(r.get("output_tokens") or 0),
+                    "cache_read_tokens": int(r.get("cache_read_tokens") or 0),
+                    "cache_write_tokens": int(r.get("cache_write_tokens") or 0),
+                    "reasoning_tokens": int(r.get("reasoning_tokens") or 0),
+                    "duration_ms": int(r.get("duration_ms") or 0),
+                    "run_id": run_id,
+                    "seq": seq,
+                })
+
+            # 先按 (run_id, seq) 过滤已落库的行：中断恢复/重放常把整批 usage 再提交一次，
+            # 直接 add_all 会因唯一索引冲突丢掉同一批里的新行。
+            existing = await session.execute(
+                select(LlmUsage.seq).where(LlmUsage.run_id == run_id)
+            )
+            existing_seqs = set(existing.scalars().all())
+            new_values = [v for v in values if v["seq"] not in existing_seqs]
+            if not new_values:
+                return 0
+
+            session.add_all([LlmUsage(**v) for v in new_values])
             await session.commit()
+            return len(new_values)
         finally:
             await session.close()
-        return inserted
-    except Exception:
-        server_logger.exception("Failed to record usage rows (%d) for session %s", len(rows), session_id)
+    except Exception as e:
+        server_logger.error(
+            "Failed to record usage rows (%d) for session %s: %s",
+            len(rows), session_id, safe_error_text(e),
+        )
         return 0
 
 

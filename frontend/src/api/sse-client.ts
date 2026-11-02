@@ -42,6 +42,8 @@ export interface SseMessage {
   cache_read_tokens?: number
   reasoning_tokens?: number
   duration_ms?: number
+  // llm_usage：轮次归属，main=主 Agent，sub=子 Agent
+  role?: 'main' | 'sub' | string
   usage?: any[]
   http_traces?: any[]
   is_resume?: boolean

@@ -63,6 +63,14 @@ interface FileContent {
   dismissedMtime: number
 }
 
+type FileStatInfo = {
+  path: string
+  exists: boolean
+  size?: number
+  mtime?: number
+  error?: string
+}
+
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'avif']
 // 只读文档预览：与后端 _DOCUMENT_MIME_TYPES 保持一致
 const DOCUMENT_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'pptx']
@@ -208,7 +216,7 @@ export const useOpenedFilesStore = defineStore('openedFiles', () => {
     const agentsStore = useAgentsStore()
     try {
       // 相对路径需要 agent_id 才能定位项目根；绝对路径后端直接读
-      const isRelative = !/^[a-zA-Z]:[\\/]/.test(file.path) && !file.path.startsWith('/')
+      const isRelative = !isAbsolutePath(file.path)
       // 请求大行数，配合 CodeMirror 虚拟滚动可打开大文件
       const data = await api.readFile(file.path, 200000, isRelative ? agentsStore.currentAgentId : undefined)
       if (data.error) {
@@ -457,24 +465,49 @@ export const useOpenedFilesStore = defineStore('openedFiles', () => {
     return /^[a-zA-Z]:/.test(unified) ? unified.toLowerCase() : unified
   }
 
+  /** 绝对路径（Windows 盘符或 POSIX 根）不传 agent_id，走后端系统工具白名单 */
+  function isAbsolutePath(path: string): boolean {
+    return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith('/')
+  }
+
   /**
    * Agent 写盘后调用：把磁盘上已变的文件标记为「外部改动」。
    * 事件里的路径是绝对路径，标签里存的可能是项目相对路径，两种形态都比。
+   * 置位前先查磁盘 mtime：标签内容如果已经是最新版本（写入后才打开/重载），不要误报。
    */
-  function markExternalChanged(absolutePath: string) {
+  async function markExternalChanged(absolutePath: string) {
     if (!absolutePath) return
     const target = normalizePath(absolutePath)
-    for (const file of files.value) {
+    const matched = files.value.filter((file) => {
       const candidates = [
         normalizePath(file.sourcePath),
         normalizePath(toAbsolute(file.path)),
         normalizePath(file.path),
       ]
-      if (!candidates.includes(target)) continue
+      return candidates.includes(target)
+    })
+    if (matched.length === 0) return
+
+    const mtimeByPath = new Map<string, number>()
+    try {
+      const infos = await fetchStats(matched.map(file => file.path))
+      for (const info of infos) {
+        if (info.exists && !info.error && (info.mtime ?? 0) > 0) {
+          mtimeByPath.set(info.path, info.mtime as number)
+        }
+      }
+    } catch {
+      // 查询失败时退回保守策略：照常标记
+    }
+
+    for (const file of matched) {
       const c = contents.value[file.path]
       // 内容还没加载或已卸载，无从比较，等下次加载自然拿到新内容
       if (!c?.loaded) continue
+      const diskMtime = mtimeByPath.get(file.path) ?? 0
+      if (diskMtime > 0 && sameMtime(diskMtime, c.mtime)) continue
       c.externalChanged = true
+      if (diskMtime > 0) c.externalMtime = diskMtime
     }
   }
 
@@ -512,6 +545,33 @@ export const useOpenedFilesStore = defineStore('openedFiles', () => {
     if (c.image) return !!c.imageDataUrl
     if (c.document) return !!c.documentDataUrl
     return true
+  }
+
+  /**
+   * 按路径类型分组查询 stat：项目内相对路径带 agent_id，绝对路径不带。
+   * 绝对路径可能跨项目，后端只有不传 agent_id 时才走系统工具白名单；
+   * 否则会被项目根校验拒绝，误报成「文件已删除」。
+   */
+  async function fetchStats(paths: string[]): Promise<FileStatInfo[]> {
+    if (paths.length === 0) return []
+    const agentId = agentsStore.currentAgentId
+    if (!agentId) return []
+    const relative: string[] = []
+    const absolute: string[] = []
+    for (const path of paths) {
+      if (isAbsolutePath(path)) absolute.push(path)
+      else relative.push(path)
+    }
+    const requests: Array<Promise<{ files?: FileStatInfo[]; error?: string }>> = []
+    if (relative.length > 0) requests.push(api.statFiles(agentId, relative))
+    if (absolute.length > 0) requests.push(api.statFiles(undefined, absolute))
+    const responses = await Promise.all(requests)
+    const infos: FileStatInfo[] = []
+    for (const res of responses) {
+      if (res.error) continue
+      infos.push(...(res.files ?? []))
+    }
+    return infos
   }
 
   function stopPolling() {
@@ -558,10 +618,14 @@ export const useOpenedFilesStore = defineStore('openedFiles', () => {
 
     let newlyFlagged = false
     try {
-      const res = await api.statFiles(agentId, targets.map(f => f.path))
-      for (const info of res.files ?? []) {
+      const infos = await fetchStats(targets.map(f => f.path))
+      for (const info of infos) {
         const c = contents.value[info.path]
         if (!c?.loaded) continue
+
+        // 权限/解析失败（例如跨项目绝对路径）：无法判断文件是否变化，保持原状态。
+        // 不能当成「文件被删除」，否则每轮轮询都会重新置位，点多少次重载都会复发。
+        if (info.error) continue
 
         // 文件被删除或移走：磁盘上没有可比对的版本，内容必然已过期
         if (!info.exists) {

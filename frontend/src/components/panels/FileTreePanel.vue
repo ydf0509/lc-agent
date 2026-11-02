@@ -410,8 +410,11 @@ watch(keyword, scheduleSearch)
 
 async function openResult(item: ProjectTreeEntry) {
   if (item.type === 'dir') {
+    // 点击搜索结果中的文件夹：退出搜索态，并走 reveal 定位链在树中逐级展开到该目录。
+    // 不能只 store.load(item.path)：那只是把子项拉进缓存，isOpen 是每个节点的本地
+    // 状态、全为 false，树视图仍停在原处，用户看不到任何变化。
     keyword.value = ''
-    await store.load(agentsStore.currentAgentId, item.path)
+    store.reveal(item.path)
     return
   }
   await openFile(item.path)

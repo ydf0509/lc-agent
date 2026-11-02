@@ -17,6 +17,7 @@ import argparse
 import json
 import re
 import sys
+from urllib.parse import urljoin, urlparse
 
 # 缺少依赖时直接抛 ImportError，由用户自行安装
 import requests
@@ -104,7 +105,8 @@ def search_baidu(keyword: str, num: int = 30, http_client: str = "curl_cffi") ->
         if not a:
             continue
         title = a.get_text(strip=True)
-        url = a.get("href", "")
+        # 百度部分卡片（如视频聚合）的 href 是相对路径（/sf/vsearch?...），补全为绝对 URL
+        url = urljoin("https://www.baidu.com/", a.get("href", ""))
 
         # 摘要
         abstract = ""
@@ -145,11 +147,13 @@ def search_baidu(keyword: str, num: int = 30, http_client: str = "curl_cffi") ->
             site = re.sub(r"\d{4}[-年].*$", "", site_raw.replace("广告", "")).strip()
         elif "/" in site and not site.startswith("http"):
             site = site.split("/")[0].strip()
+        if not site:
+            site = urlparse(url).netloc  # 站点名取不到时用真实域名兜底
 
         item = {
             "title": title,
             "url": url,
-            "abstract": abstract[:200],
+            "abstract": abstract,
             "date": date,
             "site": site,
             "is_advertisement": is_advertisement,

@@ -22,16 +22,9 @@ ASK_USER_SYSTEM_PROMPT = """\
 You have access to the `ask_user` tool to ask the user questions when you need clarification or input.
 Use this tool sparingly — only when you genuinely need information you cannot determine from context.
 
-Each question must specify a `type`:
-- `"text"`: free-form text answer
-- `"multiple_choice"`: user selects from `choices` (an "Other / custom" option is always available);
-  set `"allow_multiple": true` to let the user pick more than one option
-
 When using `ask_user`:
 - Be concise and specific
-- Prefer `multiple_choice` when the answer set is finite and enumerable
 - Group related questions into a **single** `ask_user` call; never make multiple sequential calls for information you need at once
-- Set `"required": false` for truly optional questions
 - Never ask questions you can answer yourself from the available context
 - Do NOT use for trivial yes/no decisions — just proceed with your best judgment
 
@@ -41,13 +34,40 @@ Do NOT use `ask_user` for:
 </ask_user_rules>"""
 
 
+class QuestionInput(TypedDict):
+    """LLM-facing question spec.
+
+    Deliberately has NO ``type`` field: the type is inferred server-side from
+    ``choices`` (present -> multiple_choice, absent -> text), so the model has
+    no redundant field to forget or contradict.
+    """
+
+    question: Annotated[str, "The question text to display to the user."]
+    choices: NotRequired[
+        Annotated[
+            list[str],
+            "Include to make the question multiple-choice; omit for free-text input. "
+            "An 'Other / custom' option is always appended automatically.",
+        ]
+    ]
+    required: NotRequired[
+        Annotated[bool, "Whether the user must answer. Defaults to true if omitted."]
+    ]
+    allow_multiple: NotRequired[
+        Annotated[
+            bool,
+            "Only for questions with 'choices': allow selecting multiple options simultaneously. Defaults to false.",
+        ]
+    ]
+
+
 class Question(TypedDict):
-    """A question to present to the user in a single ask_user call."""
+    """Normalized question used internally and in the interrupt payload sent to the frontend."""
 
     question: Annotated[str, "The question text to display to the user."]
     type: Annotated[
         Literal["text", "multiple_choice"],
-        "Question type: 'text' for free-form input, 'multiple_choice' for predefined options.",
+        "Inferred server-side: 'multiple_choice' when 'choices' is present, else 'text'.",
     ]
     choices: NotRequired[
         Annotated[
@@ -69,19 +89,29 @@ class Question(TypedDict):
 ASK_USER_TOOL_DESCRIPTION = """\
 Ask the user one or more questions when you need clarification or input before proceeding.
 
-Each question must specify a type:
-- "text": Free-form text response from the user
-- "multiple_choice": User selects from predefined options (an "Other / custom" option is always appended)
+Each question object has:
+- "question" (required): the question text shown to the user
+- "choices": list of option strings — include it to make the question multiple-choice,
+  omit it to let the user type a free-text answer.
+  An "Other / custom" option is always appended automatically.
+- "allow_multiple": true to let the user select several options (only together with "choices")
+- "required": false for optional questions (default: required)
 
-For multiple_choice questions, provide a "choices" list. Set "allow_multiple": true to allow selecting
-multiple options simultaneously.
-By default all questions are required. Set "required": false for optional questions.
+Prefer multiple-choice (include "choices") when the answer set is finite and enumerable.
+Mark a question optional ("required": false) only when you can proceed without the answer.
+
+Example:
+{"questions": [
+  {"question": "Deploy to which environment?", "choices": ["testing", "staging", "production"]},
+  {"question": "Any extra notes? (optional)", "required": false}
+]}
+
 Do not include "(required)" or "(optional)" annotations in the question text — the UI renders that
 separately based on the "required" field.
 
 Use this tool when:
 - Critical information is missing and cannot be inferred from context
-- The user must choose from a limited set of alternatives (use multiple_choice)
+- The user must choose from a limited set of alternatives (provide "choices")
 - Confirmation is needed before an irreversible action
 - Multiple pieces of information are needed at once
 
@@ -89,8 +119,35 @@ Group related questions into a single call to minimise interruptions.
 Do NOT use for decisions you can make yourself from the available context."""
 
 
+def _normalize_questions(questions: list[QuestionInput]) -> list[Question]:
+    """Infer `type` from `choices` and build normalized Question dicts.
+
+    The LLM-facing schema has no `type` field: a question with a non-empty
+    "choices" list is multiple_choice, anything else is text. Unknown extra
+    keys (e.g. a stale "type" still emitted by the model) are dropped.
+    """
+    normalized: list[Question] = []
+    for q in questions:
+        if not isinstance(q, dict):
+            # Keep as-is; _validate_questions raises the friendly error below.
+            normalized.append(cast("Question", q))
+            continue
+        choices = q.get("choices")
+        nq: dict[str, Any] = {
+            "question": q.get("question"),
+            "type": "multiple_choice" if choices else "text",
+        }
+        if choices:
+            nq["choices"] = choices
+        for key in ("required", "allow_multiple"):
+            if key in q:
+                nq[key] = q[key]
+        normalized.append(cast("Question", nq))
+    return normalized
+
+
 def _validate_questions(questions: list[Question]) -> None:
-    """Validate question list structure before interrupting the agent."""
+    """Validate normalized question list structure before interrupting the agent."""
     if not questions:
         raise ValueError("ask_user requires at least one question")
     for i, q in enumerate(questions):
@@ -217,20 +274,21 @@ def _parse_answers(
     return Command(update={"messages": [ToolMessage(result_text, tool_call_id=tool_call_id)]})
 
 
-@tool('ask_user',description=ASK_USER_TOOL_DESCRIPTION)
+@tool("ask_user", description=ASK_USER_TOOL_DESCRIPTION)
 def _ask_user(
-    questions: list[Question],
+    questions: list[QuestionInput],
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command[Any]:
     """Ask the user one or more questions and return their answers."""
-    _validate_questions(questions)
+    normalized = _normalize_questions(questions)
+    _validate_questions(normalized)
     payload = {
         "type": "ask_user",
-        "questions": questions,
+        "questions": normalized,
         "tool_call_id": tool_call_id,
     }
     response = interrupt(payload)
-    return _parse_answers(response, questions, tool_call_id)
+    return _parse_answers(response, normalized, tool_call_id)
 
 
 class AskUserMiddleware(QuickToolsMiddleware):

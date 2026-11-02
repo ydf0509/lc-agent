@@ -49,7 +49,7 @@
 | Token 费用统计 | 独立用量页面（管理页 + 个人页），每次 LLM 调用落库，按用户/agent/模型/天聚合金额，单价可配，可导出 CSV |
 | Auth & Permission | 支持登录认证、用户隔离、管理员能力、审批白名单 |
 | 联网、rag知识库 | 同时通过接入对应的mcp来给llm提供能力，例如anysearch 和 nbrag |
-| ai coding | 内置工具组和第三方mcp例如serena mcp都能使lc-aegnt 实现ai coding |
+| ai coding | 内置工具组已支持实现ai coding |
 | Context Management | 内置 SummarizationMiddleware，长对话自动压缩摘要，避免上下文溢出 |
 | Streaming & Diff | 命令执行实时流式输出、文件编辑 diff 预览、写入预览，过程全程可视 |
 | 自动化任务 | 用户可以配置定时任务，agent自动定时运行任务，并发送通知到钉钉 企业微信 飞书中 |
@@ -400,6 +400,17 @@ launch_desktop(host='127.0.0.1', port=8001, title="心有灵犀") # host port ti
 [启动gui客户端](https://github.com/ydf0509/lc-agent-bfzs/blob/6cf03fe2db265021cf82964851fb84af625744b3/bfzs/start_desktop.py)
 
 
+## 推荐做法
+
+### 如果是win用户推荐用户安装 PowerShell 7.xx版本（和lc-agent无关）
+
+推荐安装pwsh（PowerShell 7.xx）和lc-agent无关，是ai对powershell 5 不熟悉容易出错，powershell 5 本身语法不够先进。
+lc-agent对win用户优先自动探测并使用PowerShell 7.xx版本，pwsh 7.xx对命令行支持的更好。
+powershell 5.xx命令行表达能力很弱，对于复杂命令行命令agent很容易写错。
+
+安装pwsh (PowerShell 7.xx)
+`winget install --id Microsoft.PowerShell --source winget`
+
 ## FAQ
 
 ### lc-agent 是否内置 RAG 知识库？
@@ -490,15 +501,17 @@ lc-agent系统提示词很少，除了必要的工具描述，不内置系统级
 lc-agent 是综合了openwebui openclaw trae-ide workbuddy 的功能，能bs方式部署，也能单机本机cs部署。
 
 
-## 推荐做法
+###  为什么要使用lc-agent，而不是用豆包 deepseek官方网页版？
 
-### win用户推荐用户安装 PowerShell 7.xx版本
+这就好比workbuddy对比元宝，trae对比豆包一样。agent吊打官网模型家联网工具，官网的为了省成本很保守，不会主动多轮联网。
 
-lc-agent对win用户优先自动探测并使用PowerShell 7.xx版本，pwsh 7.xx对命令行支持的更好。
-powershell 5.xx命令行表达能力很弱，对于复杂命令行命令agent很容易写错。
+举个实际例子，用户提问 "主流手机9000ma以上，价格3000以内的，都列举出来，要列出手机型号 cpu 充电速度 价格"
 
-安装pwsh (PowerShell 7.xx)
-`winget install --id Microsoft.PowerShell --source winget`
+lc-agent 加作者手写的 baidu-search skill（白嫖百度搜索）的，答案的手机机型 参数非常全面准确，如下图
+![baidu_search_phone_list](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/baidu_skill_phone_list.png)
+
+而豆包官网，虽然有字节跳动搜索引擎加持，回答却漏很多机型，参数不准
+![doubao_phone_list](https://raw.githubusercontent.com/ydf0509/lc-agent/main/docs_pic/doubao_phone_list.png)
 
 ## License
 

@@ -22,8 +22,10 @@ function readQueryFlag(name: string): boolean {
 export const useDesktopMode = defineStore('desktop', () => {
   const wantDesktop = readQueryFlag('desktop')
   const frameless = readQueryFlag('frameless')
+  // maximized=1 由 Python 侧 desktop.py 拼接：启动即最大化，按钮初始显示"还原"图标
+  const startMaximized = readQueryFlag('maximized')
   const bridgeReady = ref(false)
-  const isMaximized = ref(false)
+  const isMaximized = ref(startMaximized)
 
   const isDesktop = computed(() => wantDesktop || bridgeReady.value)
   const isFrameless = computed(() => frameless)

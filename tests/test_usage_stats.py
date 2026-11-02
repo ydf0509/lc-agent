@@ -174,7 +174,7 @@ async def test_record_usage_run_seq_unique(db_env):
     rows = [{"model_id": "m1", "raw_model_id": "r1", "provider": "p", "role": "main",
              "sub_session_id": "", "input_tokens": 10, "output_tokens": 5}]
     assert await record_usage(rows, session_id="s1", user_id="u1", agent_id="chat", run_id="run-x") == 1
-    # 同 run_id 再次提交 → 唯一索引冲突，recorder 吞掉异常只记日志
+    # 同 run_id 再次提交 → 按 (run_id, seq) 幂等跳过
     assert await record_usage(rows, session_id="s1", user_id="u1", agent_id="chat", run_id="run-x") == 0
 
     from lc_agent.db.engine import get_async_session
@@ -183,6 +183,44 @@ async def test_record_usage_run_seq_unique(db_env):
     try:
         count = (await session.execute(sql_text("SELECT count(*) FROM llm_usage"))).scalar()
         assert count == 1
+    finally:
+        await session.close()
+
+
+@pytest.mark.asyncio
+async def test_record_usage_skips_duplicate_rows_and_inserts_new(db_env):
+    """重放批次里只有重复行时跳过，新的 seq 仍要落库。"""
+    first_rows = [{"model_id": "m1", "raw_model_id": "r1", "provider": "p", "role": "main",
+                   "sub_session_id": "", "input_tokens": 10, "output_tokens": 5}]
+    assert await record_usage(
+        first_rows, session_id="s1", user_id="u1", agent_id="chat", run_id="run-mixed",
+    ) == 1
+
+    replay_rows = [
+        # 同 run_id + seq=0：重复，必须跳过（不能把已落库的 10 覆盖成 999）
+        {"model_id": "m1", "raw_model_id": "r1", "provider": "p", "role": "main",
+         "sub_session_id": "", "input_tokens": 999, "output_tokens": 5},
+        # 新的 seq=1：必须写入
+        {"model_id": "m2", "raw_model_id": "r2", "provider": "p", "role": "main",
+         "sub_session_id": "", "input_tokens": 20, "output_tokens": 7},
+    ]
+    assert await record_usage(
+        replay_rows, session_id="s1", user_id="u1", agent_id="chat", run_id="run-mixed",
+    ) == 1
+
+    from lc_agent.db.engine import get_async_session
+
+    session = get_async_session(db_env)
+    try:
+        result = await session.execute(sql_text(
+            "SELECT seq, model_id, input_tokens FROM llm_usage "
+            "WHERE run_id = 'run-mixed' ORDER BY seq"
+        ))
+        stored = result.mappings().all()
+        assert [row["seq"] for row in stored] == [0, 1]
+        assert stored[0]["input_tokens"] == 10
+        assert stored[1]["model_id"] == "m2"
+        assert stored[1]["input_tokens"] == 20
     finally:
         await session.close()
 

@@ -5,12 +5,15 @@ accumulates display state and token usage for persistence.
 """
 
 import json
+import re
 import time
 from typing import Any
 
 from langgraph.errors import GraphInterrupt
+from sqlalchemy.exc import SQLAlchemyError
 
 from lc_agent.core.engine_helpers.content_helpers import blocks_to_display_text
+from lc_agent.utils.error_text import safe_error_text, safe_traceback_text
 from lc_agent.utils.image_tokens import estimate_content_image_tokens
 
 
@@ -898,10 +901,125 @@ def _append_summarization_usage(
     })
 
 
-def categorize_error(error: Exception) -> dict:
+def _class_names(error: BaseException) -> set[str]:
+    return {cls.__name__ for cls in type(error).__mro__}
+
+
+def _status_code(error: BaseException) -> int | None:
+    status = getattr(error, "status_code", None)
+    if isinstance(status, int):
+        return status
+    response = getattr(error, "response", None)
+    status = getattr(response, "status_code", None)
+    return status if isinstance(status, int) else None
+
+
+def _is_timeout_error(error: BaseException) -> bool:
+    return bool(_class_names(error) & {
+        "TimeoutError", "TimeoutException", "APITimeoutError",
+        "ReadTimeout", "ConnectTimeout", "PoolTimeout",
+    })
+
+
+def _is_connection_error(error: BaseException) -> bool:
+    return bool(_class_names(error) & {
+        "APIConnectionError", "ConnectError", "ConnectionError",
+        "ConnectionResetError", "RemoteProtocolError", "ReadError",
+        "WriteError", "NetworkError",
+    })
+
+
+def _timeout_info() -> dict:
+    return {
+        "title": "请求超时",
+        "detail": "AI 模型响应超时，可能是模型负载过高或网络不稳定。",
+        "suggestions": ["稍后重试", "尝试减少输入内容长度", "检查网络连接"],
+        "error_code": "TIMEOUT",
+    }
+
+
+def _connection_info() -> dict:
+    return {
+        "title": "模型服务器连接失败",
+        "detail": "无法连接到 AI 模型服务器，请检查网络或服务器状态。",
+        "suggestions": ["检查服务器地址和端口是否正确", "确认 AI 模型网关服务是否在运行", "检查防火墙或网络代理设置"],
+        "error_code": "CONNECTION_FAILED",
+    }
+
+
+def _server_unavailable_info(status: int | None, msg: str) -> dict:
+    if status is not None:
+        detail = f"AI 模型服务端返回 HTTP {status}，可能是网关/上游服务异常或正在维护。"
+    else:
+        detail = "AI 模型服务端返回 5xx 错误，可能是服务负载过高或正在维护。"
+        if msg:
+            detail = f"{detail}\n{msg}"
+    return {
+        "title": "AI 模型服务暂时不可用",
+        "detail": detail,
+        "suggestions": ["等待几秒后重试", "如持续不可用，切换其他模型/渠道或联系服务商"],
+        "error_code": "SERVER_UNAVAILABLE",
+    }
+
+
+def categorize_error(error: BaseException) -> dict:
     """Categorize an exception into structured Chinese error info for the frontend."""
-    msg = str(error)
+    msg = safe_error_text(error)
     msg_lower = msg.lower()
+    status = _status_code(error)
+    names = _class_names(error)
+
+    if "CancelledError" in names:
+        return {
+            "title": "请求已取消",
+            "detail": "本轮请求已取消，未继续执行。",
+            "suggestions": ["如需继续，请重新发送消息"],
+            "error_code": "CANCELLED",
+        }
+
+    if status in (401, 403):
+        return {
+            "title": "API 密钥认证失败",
+            "detail": f"AI 模型的 API 密钥无效或无权限（HTTP {status}）。",
+            "suggestions": ["检查配置文件中的 API Key 是否正确", "确认 API Key 是否有对应模型的访问权限", "如已更换密钥，请更新配置后重试"],
+            "error_code": "AUTH_FAILED",
+        }
+
+    if status == 429:
+        return {
+            "title": "请求频率超限",
+            "detail": "向 AI 模型的请求频率超过限制，已被暂时限流。",
+            "suggestions": ["等待一段时间后重试", "降低请求并发数", "联系服务商提升配额"],
+            "error_code": "RATE_LIMITED",
+        }
+
+    if status == 404:
+        return {
+            "title": "模型不存在或不可用",
+            "detail": "请求的 AI 模型不存在或当前不可用（HTTP 404）。",
+            "suggestions": ["检查选择的模型名称是否正确", "确认该模型在 API 服务商处可用", "尝试切换其他模型"],
+            "error_code": "MODEL_NOT_FOUND",
+        }
+
+    if status in (408, 524):
+        return _timeout_info()
+
+    if status is not None and 500 <= status <= 599:
+        return _server_unavailable_info(status, msg)
+
+    if _is_timeout_error(error):
+        return _timeout_info()
+
+    if _is_connection_error(error):
+        return _connection_info()
+
+    if isinstance(error, SQLAlchemyError):
+        return {
+            "title": "服务端数据存储失败",
+            "detail": f"服务端数据库操作失败：{msg}",
+            "suggestions": ["检查数据库连接、磁盘空间和数据库状态", "稍后重试", "如持续失败请联系管理员"],
+            "error_code": "STORAGE_ERROR",
+        }
 
     if any(k in msg_lower for k in (
         "401", "unauthorized", "authentication", "api key",
@@ -936,20 +1054,10 @@ def categorize_error(error: Exception) -> dict:
         "connect failed", "no route to host", "name or service not known",
         "getaddrinfo failed",
     )):
-        return {
-            "title": "模型服务器连接失败",
-            "detail": "无法连接到 AI 模型服务器，请检查网络或服务器状态。",
-            "suggestions": ["检查服务器地址和端口是否正确", "确认 AI 模型网关服务是否在运行", "检查防火墙或网络代理设置"],
-            "error_code": "CONNECTION_FAILED",
-        }
+        return _connection_info()
 
     if any(k in msg_lower for k in ("timeout", "timed out", "deadline exceeded")):
-        return {
-            "title": "请求超时",
-            "detail": "AI 模型响应超时，可能是模型负载过高或网络不稳定。",
-            "suggestions": ["稍后重试", "尝试减少输入内容长度", "检查网络连接"],
-            "error_code": "TIMEOUT",
-        }
+        return _timeout_info()
 
     if any(k in msg_lower for k in ("content filter", "content_filter", "safety", "blocked")):
         return {
@@ -967,13 +1075,8 @@ def categorize_error(error: Exception) -> dict:
             "error_code": "INSUFFICIENT_QUOTA",
         }
 
-    if any(k in msg_lower for k in ("500", "502", "503", "504", "service unavailable", "internal server error")):
-        return {
-            "title": "AI 模型服务暂时不可用",
-            "detail": "AI 模型服务端返回错误，可能是服务负载过高或正在维护。",
-            "suggestions": ["等待几秒后重试", "如持续不可用，联系服务商或管理员"],
-            "error_code": "SERVER_UNAVAILABLE",
-        }
+    if re.search(r"\b5\d{2}\b", msg_lower):
+        return _server_unavailable_info(None, msg)
 
     return {
         "title": "AI 模型接口请求失败",
@@ -981,3 +1084,37 @@ def categorize_error(error: Exception) -> dict:
         "suggestions": ["请稍后重试，如问题持续请联系管理员"],
         "error_code": "UNKNOWN_ERROR",
     }
+
+
+def build_error_event(error: BaseException) -> dict:
+    """Build the SSE error payload: always non-empty detail/message/tech_detail."""
+    try:
+        info = categorize_error(error)
+    except BaseException:
+        info = {
+            "title": "AI 模型接口请求失败",
+            "detail": f"{type(error).__name__}: 未能解析错误详情",
+            "suggestions": ["请稍后重试，如问题持续请查看服务端日志"],
+            "error_code": "UNKNOWN_ERROR",
+        }
+
+    # 归纳只做辅助；原始异常永远是正文第一行，不能被分类文案吞掉。
+    try:
+        raw = safe_error_text(error, limit=800)
+    except BaseException:
+        raw = type(error).__name__
+    summary = str(info.get("detail") or "").strip()
+    if summary:
+        info["detail"] = f"原始错误：{summary}" if raw in summary else f"原始错误：{raw}\n\n{summary}"
+    else:
+        info["detail"] = f"原始错误：{raw}"
+
+    try:
+        info["tech_detail"] = safe_traceback_text(error)
+    except BaseException:
+        info["tech_detail"] = type(error).__name__
+    try:
+        info["message"] = safe_error_text(error)
+    except BaseException:
+        info["message"] = type(error).__name__
+    return info

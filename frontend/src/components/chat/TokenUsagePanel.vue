@@ -49,6 +49,7 @@
             <th>总输出</th>
             <th>总缓存</th>
             <th>Duration</th>
+            <th v-if="hasRoundTps">TPS</th>
           </tr>
         </thead>
         <tbody>
@@ -66,6 +67,7 @@
             <td>{{ formatTokens(round.outputTokens) }}</td>
             <td>{{ formatTokens(round.cacheReadTokens) }}</td>
             <td class="col-duration">{{ round.duration ? formatDuration(round.duration) : '-' }}</td>
+            <td v-if="hasRoundTps" class="col-duration">{{ round.tps ? round.tps.toFixed(1) : '-' }}</td>
           </tr>
           <tr class="row-sum">
             <td class="col-num">Sum</td>
@@ -74,6 +76,7 @@
             <td>{{ formatTokens(totalOutput) }}</td>
             <td>{{ formatTokens(totalCached) }}</td>
             <td class="col-duration">{{ usage.totalDuration ? formatDuration(usage.totalDuration) : '-' }}</td>
+            <td v-if="hasRoundTps" class="col-duration">{{ avgTps ? avgTps.toFixed(1) : '-' }}</td>
           </tr>
         </tbody>
       </table>
@@ -180,6 +183,24 @@ const currentWindowInput = computed(() => {
   return rounds.length > 0 ? rounds[rounds.length - 1].inputTokens : 0
 })
 
+// 平均 TPS：只统计有前端打点的轮次（纯生成耗时），历史消息没有 genMs 时不显示。
+const avgTps = computed(() => {
+  const rounds = props.usage?.rounds || []
+  let tokens = 0
+  let genMs = 0
+  for (const round of rounds) {
+    if (round.genMs && round.genMs > 0) {
+      tokens += round.outputTokens || 0
+      genMs += round.genMs
+    }
+  }
+  return genMs > 0 ? tokens / (genMs / 1000) : null
+})
+
+const hasRoundTps = computed(() =>
+  (props.usage?.rounds || []).some(round => round.tps != null)
+)
+
 function isWindowDrop(index: number): boolean {
   const rounds = props.usage?.rounds || []
   if (index <= 0 || index >= rounds.length) return false
@@ -265,6 +286,8 @@ function toggleToolsDetails() {
 .usage-badges {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .badge {

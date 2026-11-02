@@ -6,6 +6,8 @@ use ``get_business_async_session()`` (no ``db_url`` plumbing).
 import logging
 from typing import Any
 
+from lc_agent.utils.error_text import safe_traceback_text
+
 
 logger = logging.getLogger(__name__)
 
@@ -177,8 +179,8 @@ async def save_ui_message(
             )
         finally:
             await session.close()
-    except Exception:
-        logger.exception("Failed to persist UI message for session %s", thread_id)
+    except Exception as e:
+        logger.error("Failed to persist UI message for session %s\n%s", thread_id, safe_traceback_text(e))
         raise
 
 
@@ -244,8 +246,8 @@ async def persist_interrupted_round(
         )
         if wrote:
             await increment_session_message_count(thread_id)
-    except Exception:
-        logger.exception("Failed to persist interrupted round for session %s", thread_id)
+    except Exception as e:
+        logger.error("Failed to persist interrupted round for session %s\n%s", thread_id, safe_traceback_text(e))
 
 
 async def persist_interrupted_resume_round(
@@ -280,8 +282,8 @@ async def persist_interrupted_resume_round(
             usage_rounds=split_chat_usage_rounds(usage_rounds) or None,
             resume_duration_ms=elapsed_ms,
         )
-    except Exception:
-        logger.exception("Failed to persist interrupted resume round for session %s", thread_id)
+    except Exception as e:
+        logger.error("Failed to persist interrupted resume round for session %s\n%s", thread_id, safe_traceback_text(e))
 
 
 async def truncate_from_message(thread_id: str, message_id: str) -> None:

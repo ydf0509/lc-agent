@@ -20,6 +20,10 @@ export interface LlmRoundUsage {
   cacheReadTokens: number
   reasoningTokens: number
   duration?: number
+  /** 前端估算：本轮首个 token 到 llm_usage 到达的毫秒数（纯生成耗时，不含工具执行） */
+  genMs?: number
+  /** 前端估算：本轮输出速度 tokens/s */
+  tps?: number
 }
 
 export interface MessageUsage {
@@ -806,6 +810,8 @@ export const useChatStore = defineStore('chat', () => {
     state.isStreaming.value = true
     state.streamStartTime = Date.now()
     state.currentRoundStart = Date.now()
+    state.currentRoundFirstTokenAt = 0
+    state.subagentFirstTokenAt.clear()
     state.messages.value.push({
       id: createClientId(),
       role: 'assistant',
@@ -814,6 +820,19 @@ export const useChatStore = defineStore('chat', () => {
       isStreaming: true,
       usage: { rounds: [], toolCallCount: 0 },
     })
+  }
+
+  /** 记下主 Agent 本轮第一个 token 的时间（reasoning 或正文都算，输出 token 含 reasoning）。 */
+  function _markMainFirstToken(state: SessionState): void {
+    if (!state.currentRoundFirstTokenAt) state.currentRoundFirstTokenAt = Date.now()
+  }
+
+  /** 记下子 Agent 某个 run 的第一个 token 时间，key 用 tool_call_id。 */
+  function _markSubagentFirstToken(state: SessionState, msg: SseMessage): void {
+    const toolCallId = msg.tool_call_id || ''
+    if (toolCallId && !state.subagentFirstTokenAt.has(toolCallId)) {
+      state.subagentFirstTokenAt.set(toolCallId, Date.now())
+    }
   }
 
   function _registerHandlers(client: ChatSseClient, state: SessionState, sessionId: string) {
@@ -838,6 +857,7 @@ export const useChatStore = defineStore('chat', () => {
 
     client.on('thinking', (msg: SseMessage) => {
       _ensureAssistantPlaceholder(state)
+      _markMainFirstToken(state)
       const last = state.messages.value[state.messages.value.length - 1]
       if (last && last.role === 'assistant') {
         if (!state.inThinking) {
@@ -850,6 +870,7 @@ export const useChatStore = defineStore('chat', () => {
 
     client.on('token', (msg: SseMessage) => {
       _ensureAssistantPlaceholder(state)
+      _markMainFirstToken(state)
       const last = state.messages.value[state.messages.value.length - 1]
       if (last && last.role === 'assistant') {
         if (state.inThinking) {
@@ -871,14 +892,30 @@ export const useChatStore = defineStore('chat', () => {
       const last = state.messages.value[state.messages.value.length - 1]
       if (last?.usage) {
         const roundDuration = state.currentRoundStart ? Date.now() - state.currentRoundStart : undefined
+        // 平均 TPS 用「首个 token -> llm_usage 到达」的纯生成耗时，不含工具执行/排队；
+        // 子 Agent 轮次按 sub_session_id（等于 tool_call_id）取各自的打点，避免并发流串台。
+        const isSubRound = msg.role === 'sub'
+        const subSessionId = msg.sub_session_id || ''
+        const firstTokenAt = isSubRound
+          ? (subSessionId ? state.subagentFirstTokenAt.get(subSessionId) : undefined)
+          : state.currentRoundFirstTokenAt
+        const genMs = firstTokenAt ? Date.now() - firstTokenAt : undefined
+        const outputTokens = msg.output_tokens || 0
         last.usage.rounds.push({
           inputTokens: msg.input_tokens || 0,
-          outputTokens: msg.output_tokens || 0,
+          outputTokens,
           totalTokens: msg.total_tokens || 0,
           cacheReadTokens: msg.cache_read_tokens || 0,
           reasoningTokens: msg.reasoning_tokens || 0,
           duration: roundDuration,
+          genMs,
+          tps: genMs && genMs > 0 ? outputTokens / (genMs / 1000) : undefined,
         })
+        if (isSubRound) {
+          if (subSessionId) state.subagentFirstTokenAt.delete(subSessionId)
+        } else {
+          state.currentRoundFirstTokenAt = 0
+        }
         state.currentRoundStart = Date.now()
       }
     })
@@ -1047,7 +1084,7 @@ export const useChatStore = defineStore('chat', () => {
         new_string: (msg as any).new_string,
       }, sessionId)
       // 已打开的编辑器标签若正是这个文件，磁盘内容已变，标记出来提示重载
-      useOpenedFilesStore().markExternalChanged(filePath)
+      void useOpenedFilesStore().markExternalChanged(filePath)
     })
 
     client.on('file_change_git_snapshot', (msg: SseMessage) => {
@@ -1066,6 +1103,7 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     client.on('subagent_token', (msg: SseMessage) => {
+      _markSubagentFirstToken(state, msg)
       const result = applySubAgentEventToMessages(state.messages.value, msg, applySubAgentToken, sessionId)
       if (result.shouldRefresh) {
         state.messages.value = [...state.messages.value]
@@ -1073,6 +1111,7 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     client.on('subagent_thinking', (msg: SseMessage) => {
+      _markSubagentFirstToken(state, msg)
       const result = applySubAgentEventToMessages(state.messages.value, msg, applySubAgentThinking, sessionId)
       if (result.shouldRefresh) {
         state.messages.value = [...state.messages.value]
@@ -1457,6 +1496,8 @@ export const useChatStore = defineStore('chat', () => {
     state.interrupt.value = null
     state.isStreaming.value = true
     state.currentRoundStart = Date.now()
+    state.currentRoundFirstTokenAt = 0
+    state.subagentFirstTokenAt.clear()
     const last = state.messages.value[state.messages.value.length - 1]
     if (last && last.role === 'assistant') {
       last.isStreaming = true
@@ -1475,6 +1516,8 @@ export const useChatStore = defineStore('chat', () => {
     state.interrupt.value = null
     state.isStreaming.value = true
     state.currentRoundStart = Date.now()
+    state.currentRoundFirstTokenAt = 0
+    state.subagentFirstTokenAt.clear()
     const last = state.messages.value[state.messages.value.length - 1]
     if (last && last.role === 'assistant') {
       last.isStreaming = true

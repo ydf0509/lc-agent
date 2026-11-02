@@ -45,6 +45,11 @@
         </div>
       </ToolField>
 
+      <!-- 命令之外的全部入参（max_run_ms / working_directory / wait_ms / skill_name ...），模型传了什么就显示什么 -->
+      <ToolField v-if="!isCollapsed && paramsText" label="参数" tone="dark">
+        <div class="tt-params">{{ paramsText }}</div>
+      </ToolField>
+
       <ToolField v-if="errorText && !hasOutput" label="错误" tone="dark" :offset="isCollapsed ? 0 : 8">
         <div class="tt-error">{{ errorText }}</div>
       </ToolField>
@@ -134,6 +139,27 @@ const commandText = computed(() => {
   if (args.pid != null) return `PID ${args.pid}`
   return ''
 })
+
+// 命令之外的全部入参：max_run_ms / working_directory / wait_ms / skill_name / pid / tail ...
+// 不猜默认值，args 里有什么就显示什么；空值不占位
+const paramItems = computed<{ key: string; value: string }[]>(() => {
+  const args = (props.toolCall.args || {}) as Record<string, unknown>
+  const items: { key: string; value: string }[] = []
+  for (const [key, value] of Object.entries(args)) {
+    if (key === 'command') continue
+    if (value === undefined || value === null || value === '') continue
+    items.push({ key, value: formatParamValue(value) })
+  }
+  return items
+})
+
+const paramsText = computed(() => paramItems.value.map((item) => `${item.key}=${item.value}`).join(' · '))
+
+function formatParamValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
 
 function shortCommand(cmd: string, maxLen = 42): string {
   const oneLine = cmd.replace(/\s+/g, ' ').trim()
@@ -537,7 +563,7 @@ onBeforeUnmount(() => {
 
 .tt-cmdline {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 10px;
   background: #161b22;
@@ -545,6 +571,7 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
+  line-height: 1.5;
   min-width: 0;
 }
 
@@ -554,13 +581,28 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+/* 命令最多显示 3 行，再长就省略；完整内容看 title 悬浮提示 */
 .tt-cmd {
   flex: 1;
   min-width: 0;
   color: #e6edf3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 命令下方的小字参数行：只读元信息，不抢正文视觉 */
+.tt-params {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8b949e;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .tt-copy {

@@ -30,6 +30,6 @@
 如果把所有针对特定网站url的抓取策略写到skill，那太费上下文了，违背 `agentskills.io` 的国际协议。
 
 #### 例如对于知乎网站的url
-例如对于知乎网站的url怎么获取，教会llm的skill提示词就在 `references/zhihu-browser-access.md` ,这个需要用户配置一个playwright的mcp，并且教会llm怎么点击浏览器元素获取更多回答内容。
+例如对于知乎网站的url怎么获取，教会llm的skill提示词就在 `references/zhihu-browser-access.md` ,这个需要用户安装 agent-browser skill，并且教会llm怎么点击浏览器元素获取更多回答内容。
 
 知乎回答就是普通http请求不到，因为官方不想被人轻松爬取，如果你不信，你可以给个知乎问答的url，让deepseek app根据知乎url总结正文内容，deepseek一样获取不到知乎回答详情。

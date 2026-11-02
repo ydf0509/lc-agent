@@ -1,4 +1,5 @@
 """Tests for stream_utils event conversion (replaces old WebSocket handler tests)."""
+import httpx
 import pytest
 from unittest.mock import MagicMock
 
@@ -9,6 +10,14 @@ from lc_agent.server.stream_utils import (
     format_sse_event,
     categorize_error,
 )
+
+
+class _StatusError(Exception):
+    """Test double: an API error carrying an HTTP status code."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def test_convert_stream_event_token():
@@ -312,3 +321,74 @@ def test_categorize_error_unknown():
     """Unknown errors should map to UNKNOWN_ERROR."""
     info = categorize_error(RuntimeError("something weird"))
     assert info["error_code"] == "UNKNOWN_ERROR"
+
+
+def test_categorize_error_http_520_status_code():
+    """520 is an upstream/gateway failure; it must not fall into UNKNOWN_ERROR."""
+    info = categorize_error(_StatusError(520, "Error code: 520 - '<none>'"))
+    assert info["error_code"] == "SERVER_UNAVAILABLE"
+    assert "520" in info["detail"]
+    assert info["detail"].strip()
+
+
+def test_categorize_error_timeout_without_message():
+    """asyncio.wait_for raises a message-less TimeoutError; still TIMEOUT."""
+    info = categorize_error(TimeoutError())
+    assert info["error_code"] == "TIMEOUT"
+    assert info["detail"].strip()
+
+
+def test_categorize_error_unknown_empty_message_has_detail():
+    """Even an empty exception must produce a non-empty detail for the UI."""
+    info = categorize_error(RuntimeError())
+    assert info["error_code"] == "UNKNOWN_ERROR"
+    assert info["detail"].strip()
+
+
+def test_categorize_error_sqlalchemy_is_storage_error():
+    """DB errors must not be reported as a model failure / empty detail."""
+    from sqlalchemy.exc import SQLAlchemyError
+
+    info = categorize_error(SQLAlchemyError("db unavailable"))
+    assert info["error_code"] == "STORAGE_ERROR"
+    assert "db unavailable" in info["detail"]
+
+
+def test_build_error_event_keeps_detail_and_tech_detail():
+    """The SSE payload must always carry a non-empty detail and tech_detail."""
+    from lc_agent.server.stream_utils import build_error_event
+
+    event = build_error_event(_StatusError(520, "Error code: 520 - '<none>'"))
+    assert event["error_code"] == "SERVER_UNAVAILABLE"
+    assert "520" in event["detail"]
+    assert event["message"].strip()
+    assert event["tech_detail"].strip()
+    assert "StatusError" in event["tech_detail"] or "520" in event["tech_detail"]
+
+
+def test_build_error_event_read_error_has_connection_detail():
+    """A mid-stream httpx.ReadError has an empty str; the UI must still get a reason."""
+    from lc_agent.server.stream_utils import build_error_event
+
+    event = build_error_event(httpx.ReadError(""))
+    assert event["error_code"] == "CONNECTION_FAILED"
+    assert event["detail"].strip()
+    assert event["message"].strip()
+    assert event["tech_detail"].strip()
+
+
+@pytest.mark.parametrize(
+    ("error", "raw"),
+    [
+        (_StatusError(520, "Error code: 520 - '<none>'"), "Error code: 520"),
+        (TimeoutError("timed out"), "timed out"),
+        (httpx.ReadError(""), "ReadError"),
+    ],
+)
+def test_build_error_event_always_puts_raw_error_in_detail(error, raw):
+    """Never hide the raw exception behind a summarized message."""
+    from lc_agent.server.stream_utils import build_error_event
+
+    event = build_error_event(error)
+    assert event["detail"].startswith("原始错误：")
+    assert raw in event["detail"]

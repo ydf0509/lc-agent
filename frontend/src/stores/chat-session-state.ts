@@ -20,6 +20,10 @@ export interface SessionState {
   inThinking: boolean       // mutable flag, intentionally not Ref
   streamStartTime: number   // mutable, not Ref
   currentRoundStart: number // mutable, not Ref
+  /** 当前轮次首个正文/reasoning token 到达时间（前端估算 TPS），0 表示本轮还没收到 token */
+  currentRoundFirstTokenAt: number // mutable, not Ref
+  /** 子 Agent 各 run 的首个 token 时间，key 为 tool_call_id（与 llm_usage 的 sub_session_id 对应） */
+  subagentFirstTokenAt: Map<string, number> // mutable, not Ref
   /** 本轮对话轮次号（后端 conversation_round 事件回填）：给直播消息打戳，前端不再自己数轮次 */
   currentRoundNumber: number // mutable, not Ref
   todos: Ref<TodoItem[]>
@@ -43,6 +47,8 @@ export function createSessionState(): SessionState {
     inThinking: false,
     streamStartTime: 0,
     currentRoundStart: 0,
+    currentRoundFirstTokenAt: 0,
+    subagentFirstTokenAt: new Map(),
     currentRoundNumber: 0,
     todos: ref([]),
     interrupt: ref(null),

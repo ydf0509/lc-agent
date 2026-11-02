@@ -139,6 +139,11 @@
         >
           清空
         </button>
+        <span
+          v-if="lastTurnTps"
+          class="tps-badge"
+          title="最近一轮：总输出 ÷ 模型生成耗时（不含工具执行和排队）；Reasoning 已计入"
+        >⚡ {{ lastTurnTps.toFixed(1) }} tok/s</span>
         <button
           v-if="!isStreamingState"
           type="button"
@@ -255,6 +260,26 @@ const skillSuggestions = computed<(SkillSuggestion | BuiltinCommand)[]>(() => {
 })
 
 const isStreamingState = computed(() => props.isStreaming ?? isStreaming.value)
+
+// 最近一轮对话的平均输出速度（纯前端估算：只对本次实时流有打点，历史消息不显示）。
+const lastTurnTps = computed(() => {
+  const msgs = chatStore.messages
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const msg = msgs[i]
+    if (msg.role !== 'assistant') continue
+    if (!msg.usage) return null
+    let tokens = 0
+    let genMs = 0
+    for (const round of msg.usage.rounds) {
+      if (round.genMs && round.genMs > 0) {
+        tokens += round.outputTokens || 0
+        genMs += round.genMs
+      }
+    }
+    return genMs > 0 ? tokens / (genMs / 1000) : null
+  }
+  return null
+})
 const elapsedSeconds = ref(0)
 let elapsedTimer: number | null = null
 let localStartTs = 0
@@ -872,6 +897,15 @@ function handleCancelEdit() {
   gap: 6px;
   flex-shrink: 0;
   min-height: 24px;
+}
+
+.tps-badge {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--el-color-warning-dark-2);
+  white-space: nowrap;
 }
 
 .input-action-btn,
