@@ -1,5 +1,7 @@
 # lc-agent
 
+安装方式： pip install lc-agent-app
+
 > Open-source AI Agent workbench & framework built on LangChain / LangGraph — visual, hot-swappable, fully extensible.
 >
 > 基于 LangChain / LangGraph 的 AI Agent 可视化工作台 & Python 框架，运行时热切换模型/工具/MCP/技能，无需重启，lc-agent既是产品又是框架。
